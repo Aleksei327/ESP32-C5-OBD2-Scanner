@@ -22,3 +22,4 @@ __pycache__/
 firmware/**/build/
 firmware/**/managed_components/
 firmware/**/sdkconfig.old
+firmware/**/sdkconfig
