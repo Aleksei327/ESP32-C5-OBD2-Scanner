@@ -1,0 +1,24 @@
+# KiCad: резервные копии, кэш, блокировки, локальные настройки вида
+*-backups/
+*.kicad_prl
+fp-info-cache
+*.lck
+~*.lck
+\#auto_saved_files#
+_autosave-*
+
+# Выходные файлы проверок: в репозиторий идут только PDF
+hardware/**/build/*
+!hardware/**/build/*.pdf
+
+# Фото покупных модулей (права продавцов) — только локально
+DOCS/img/
+
+# Python
+__pycache__/
+*.pyc
+
+# ESP-IDF
+firmware/**/build/
+firmware/**/managed_components/
+firmware/**/sdkconfig.old
