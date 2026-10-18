@@ -1,53 +1,76 @@
-# Сканер-адаптер OBD
+# ESP32-C5 OBD2 Scanner
 
-*DIY dual-CAN OBD2 diagnostic adapter on Seeed XIAO ESP32-C5 (PSA Diag-on-CAN + legislated OBD-II). Work in progress; documentation is in Russian for now, an English version will follow.*
+[Русская версия](README.ru.md)
 
-Самодельный диагностический адаптер. Первая цель — полный доступ ко всем блокам Citroën C3 II (2011, 1.4 KFT): ошибки, живые данные, бэкап конфигурации и телекодирование. Дальше — универсальный прибор для более новых машин.
+A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, together with a read-only Android app. The first target is my own Citroën C3 II (2011, 1.4 KFT): ECU list, fault codes (read and clear), live data, freeze frames, a bus monitor and a PDF report. Other cars are added through a JSON knowledge base, without changing the firmware.
 
-## Решения
+> **Development status:** the schematic and the single-sided PCB are complete — the board is routed on one copper layer with **no wire jumpers**. The app runs against a Python simulator and has been tested on a phone. No board has been etched or brought up yet: every hardware figure below is a design value, not a measurement.
 
-| Что | Решение | Почему |
+![Board v1, 3D view](DOCS/images/board-3d-front.png)
+
+## Key decisions
+
+| What | Choice | Why |
 | --- | --- | --- |
-| Мозг | Seeed XIAO ESP32-C5 | 2 канала CAN, оба с CAN-FD; Wi-Fi 6 на 2,4 и 5 ГГц; BLE; 8 МБ PSRAM |
-| Канал CAN A | OBD 6/14 | стандартный OBD-II (двигатель) |
-| Канал CAN B | OBD 3/8 | PSA Diag-on-CAN через BSI, доступ ко всем блокам |
-| Трансиверы | 2 × SN65HVD230 (SOIC-8), выпаянные с модулей Waveshare | 3,3 В, для C3 хватает; Rs на D4/D5 с подтяжкой — аппаратный «только слушать». CAN-FD — в v2 |
-| Питание | OBD 16 → предохранитель → HS1M → повторитель на IRFB4110 (≤ 27 В) → LM2596S-ADJ (4,9 В) → SS34 (+ TVS 1.5KE6.8CA) → LDO 3,3 В на плате XIAO | всё из запасов; переживает прикуривание от 24 В и выбросы до 100 В |
-| Исполнение | своя односторонняя плата 40 × 70 мм внутри корпуса OBD2 со встроенным разъёмом (низ — дорожки, верх — перемычки проводом) | один брелок, никаких кабелей |
-| Испытания | на машине; без машины — стенд на STM32 | |
-| Клиент | Android (Galaxy A55), ноутбук с Windows по желанию | |
-| Программы | своя (для PSA) + режим ELM327 для Car Scanner и других | |
-| База знаний | JSON-файлы по маркам на телефоне, прошивка общая | новая марка = новый файл |
+| MCU | Seeed XIAO ESP32-C5 | two CAN (TWAI) controllers, both CAN-FD capable; Wi-Fi 6 on 2.4 and 5 GHz; BLE; 8 MB PSRAM |
+| CAN channel A | OBD 6/14 | legislated OBD-II (engine) |
+| CAN channel B | OBD 3/8 | PSA Diag-on-CAN through the BSI, access to every ECU |
+| Transceivers | 2 × SN65HVD230 (SOIC-8), desoldered from Waveshare modules | 3.3 V, enough for the C3; Rs on D9/D5 with pull-ups gives a hardware listen-only mode. CAN-FD transceivers in v2 |
+| Power | OBD 16 → fuse → HS1M → IRFB4110 source follower (≤ 27 V) → LM2596S-ADJ (4.9 V) → SS34 (+ 1.5KE6.8CA TVS) → 3.3 V LDO on the XIAO | all from parts in stock; survives a 24 V jump start and surges up to 100 V |
+| Hardware | own single-sided 40 × 70 mm board inside an OBD2 enclosure with a built-in connector; tracks on the bottom only, no jumpers | one dongle, no cables |
+| App | Flutter for Android (Galaxy A55): read-only plus fault-code clearing; two themes; Russian and English | |
+| Link | Wi-Fi, JSON over WebSocket; the adapter is a "dumb" transport, all logic lives in the app | a new car is a new JSON file |
 
-## Документация
+## Repository
 
-- [Плата v1](DOCS/ПЛАТА_v1.md): блок-схема, корпус и размеры, разъём, назначение выводов, порядок первого запуска
-- [Защита питания](DOCS/ЗАЩИТА_ПИТАНИЯ.md): что бывает в бортсети и как от этого защищаемся
-- [Плата XIAO ESP32-C5](DOCS/ESP32-C5_ПЛАТА.md): распиновка и какие выводы занимаем
-- [Трансивер SN65HVD230](DOCS/CAN_SN65HVD230.md): подключение, режим «только слушать», терминаторы
-- [DC-DC на LM2596S-ADJ](DOCS/DC-DC_5V.md): обвязка и номиналы
-- [Список покупок](DOCS/ПОКУПКИ.md)
-- [Прошивка](firmware/): самотест платы v1 на ESP-IDF 6.1 (оба канала CAN, «только слушать», напряжение АКБ)
-- [KiCad-проект платы v1](hardware/scaner_v1/) (KiCad 10): схема `scaner_v1.kicad_sch`, черновая расстановка `scaner_v1.kicad_pcb`, PDF в `build/`, генераторы и проверка нетлиста в `tools/`
+| Folder | Contents |
+| --- | --- |
+| [`hardware/scaner_v1/`](hardware/scaner_v1/README.md) | KiCad 10 project: schematic, PCB, footprints, 3D models, and the Python scripts that generate and route the board; PDF exports in `build/` |
+| [`firmware/scaner_fw/`](firmware/scaner_fw/README.md) | ESP-IDF 6.1 board self-test firmware (both CAN channels, listen-only, battery voltage) |
+| [`app/`](app/README.md) | Flutter app |
+| [`sim/`](sim/README.md) | Python simulator of the adapter with a C3 attached, to develop the app without hardware or a car |
+| [`DOCS/en/`](DOCS/en/) | documentation in English ([`DOCS/`](DOCS/) — Russian originals) |
 
-Превью в VS Code: открыть файл и нажать Ctrl+Shift+V.
+## Documentation
 
-## Что известно про C3 (PSA, архитектура AEE2004/2010)
+- [Board v1](DOCS/en/board-v1.md): block diagram, enclosure, OBD wiring, pin assignment, layout notes, first power-up
+- [Input protection](DOCS/en/power-protection.md): what the car's electrical system does to pin 16 and how the board survives it
+- [LM2596 DC-DC](DOCS/en/dc-dc-5v.md): parts and values
+- [XIAO ESP32-C5](DOCS/en/xiao-esp32c5.md): pinout and which pins are used
+- [SN65HVD230 transceiver](DOCS/en/can-sn65hvd230.md): wiring, listen-only mode, terminators
+- [Adapter ↔ app protocol](DOCS/en/protocol.md)
+- [Parts list](DOCS/en/parts-list.md)
 
-- Полная диагностика идёт по пинам **3/8** (Diag-on-CAN, 500 кбит/с) через BSI. По **6/14** доступен только стандартный OBD-II двигателя.
-- Протоколы: KWP2000 и UDS поверх CAN (ISO-TP).
-- Адреса блоков (запрос:ответ): BSI `752:652`, двигатель `6A8:688`, ABS/ESP `6AD:68D`, подушки `744:644`, приборка `75F:65F`.
-- Алгоритм разблокировки записи (seed/key) опубликован.
-- Какой стоит блок двигателя, пока неизвестно (по объявлениям для KFT это Valeo). Определим сканером.
+PDF exports: [schematic](hardware/scaner_v1/build/scaner_v1.pdf), [placement and copper](hardware/scaner_v1/build/pcb_placement.pdf), [bottom copper 1:1 for etching](hardware/scaner_v1/build/pcb_bottom_cu.pdf).
 
-Источники: [arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) (адреса — в [ECU_LIST.md](https://github.com/ludwig-v/arduino-psa-diag/blob/master/ECU_LIST.md)), [psa-seedkey-algorithm](https://github.com/ludwig-v/psa-seedkey-algorithm).
+## What is known about the C3 (PSA, AEE2004/2010 architecture)
 
-## Правила
+- Full diagnostics run on pins **3/8** (Diag-on-CAN, 500 kbit/s) through the BSI. Pins **6/14** only give legislated engine OBD-II.
+- Protocols: KWP2000 and UDS over CAN (ISO-TP).
+- ECU addresses (request:response): BSI `752:652`, engine `6A8:688`, ABS/ESP `6AD:68D`, airbag `744:644`, instrument cluster `75F:65F`.
+- Which engine ECU is fitted is not known yet; the scanner will tell.
 
-1. Сначала читаем и делаем бэкап, пишем по одному параметру за раз. Во время записи на АКБ стоит зарядное.
-2. Подушки и ABS — только чтение. Экологию не трогаем.
-3. Адаптер не оставляем в машине: на пине 16 питание от АКБ есть всегда.
+## Rules
 
-## Лицензия
+1. The app only reads. The only write is clearing fault codes.
+2. Airbag and ABS: read only. Emissions systems are not touched.
+3. The adapter is not left in the car: pin 16 is powered from the battery at all times.
 
-См. [NOTICE.md](NOTICE.md) и [LICENSE](LICENSE).
+## Credits and third-party work
+
+No third-party code is copied into this repository. These projects, tools and libraries were used or consulted:
+
+- [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) — PSA ECU addresses ([ECU_LIST.md](https://github.com/ludwig-v/arduino-psa-diag/blob/master/ECU_LIST.md)).
+- [KiCad](https://www.kicad.org/) and its official symbol, footprint and 3D-model libraries.
+- [Freerouting](https://github.com/freerouting/freerouting) — used to explore routing (`hardware/scaner_v1/tools/route.py`); the final layout is routed by hand.
+- [ESP-IDF](https://github.com/espressif/esp-idf) (Espressif) — firmware framework; [Seeed Studio wiki](https://wiki.seeedstudio.com/xiao_esp32c5_getting_started/) — XIAO ESP32-C5 pinout.
+- [Flutter](https://flutter.dev/) and the Dart packages listed in [`app/pubspec.yaml`](app/pubspec.yaml): web_socket_channel, flutter_svg, google_fonts, shared_preferences, intl, image_picker, path_provider, pdf, share_plus.
+- Fonts [Exo 2](https://fonts.google.com/specimen/Exo+2) and [IBM Plex](https://github.com/IBM/plex), SIL Open Font License 1.1 (licence texts in `app/assets/google_fonts/`).
+- [websockets](https://github.com/python-websockets/websockets) — the simulator's WebSocket server.
+- Datasheets and application data: Texas Instruments (SN65HVD230, LM2596), Espressif (ESP32-C5), Waveshare (SN65HVD230 CAN Board schematic).
+
+Each of these keeps its own licence.
+
+## License
+
+See [NOTICE.md](NOTICE.md) and [LICENSE](LICENSE) (CC BY-NC-ND 4.0, with permission to build one unit for yourself).
