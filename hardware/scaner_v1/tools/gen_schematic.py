@@ -153,23 +153,22 @@ def pin_world(X, Y, rot, px, py, pa):
 
 
 # ---------------------------------------------------------------- design
-R0805 = 'Resistor_SMD:R_0805_2012Metric'
+R0805 = 'Resistor_SMD:R_1206_3216Metric'   # у тебя резисторы и конденсаторы 1206 (3.2 мм)
 R1206 = 'Resistor_SMD:R_1206_3216Metric'
-C0805 = 'Capacitor_SMD:C_0805_2012Metric'
+C0805 = 'Capacitor_SMD:C_1206_3216Metric'
 CP8 = 'Capacitor_THT:CP_Radial_D8.0mm_P3.50mm'
 SMA = 'Diode_SMD:D_SMA'
-DO35 = 'Diode_THT:D_DO-35_SOD27_P2.54mm_Vertical_AnodeUp'
-DO201 = 'Diode_THT:D_DO-201AD_P5.08mm_Vertical_AnodeUp'
+DO35 = 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal'      # стеклянные стабилитроны — лёжа
+DO201 = 'Diode_THT:D_DO-201AD_P12.70mm_Horizontal'      # TVS 1.5KE — лёжа
 SJ = 'Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm'
 
 # (ref, lib_id, value, footprint, x, y, rot, {pin: net}, dnp)
 PARTS = [
     # 1. вход, защита, замер АКБ
-    ('J1', 'Connector_Generic:Conn_01x07', 'OBD кабель', 'Connector_PinHeader_2.54mm:PinHeader_1x07_P2.54mm_Vertical',
-     30.48, 66.04, 0, {'1': 'VBAT_OBD', '2': 'GND', '3': 'GND', '4': 'CANA_H', '5': 'CANA_L', '6': 'CANB_H', '7': 'CANB_L'}, False),
+    ('J1', 'Connector_Generic:Conn_01x03', 'OBD питание', 'Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical',
+     30.48, 66.04, 0, {'1': 'VBAT_OBD', '2': 'GND', '3': 'GND'}, False),
     ('F1', 'Device:Fuse', '1A 5x20', 'Fuse:Fuseholder_Clip-5x20mm_Littelfuse_111_Inline_P20.00x5.00mm_D1.05mm_Horizontal',
      50.8, 58.42, 0, {'1': 'VBAT_OBD', '2': 'VIN_F'}, False),
-    ('D1', 'Device:D_Zener', '1.5KE27A', DO201, 66.04, 78.74, 0, {'1': 'VIN_F', '2': 'GND'}, True),
     ('D2', 'Device:D', 'HS1M', SMA, 66.04, 55.88, 180, {'1': 'VIN_PROT', '2': 'VIN_F'}, False),
     ('R1', 'Device:R', '47k', R1206, 91.44, 66.04, 0, {'1': 'VIN_PROT', '2': 'GATE_REF'}, False),
     ('D3', 'Device:D_Zener', '15V', DO35, 91.44, 81.28, 0, {'1': 'GATE_REF', '2': 'ZMID'}, False),
@@ -188,7 +187,7 @@ PARTS = [
     ('U1', 'Regulator_Switching:LM2596S-ADJ', 'LM2596S-ADJ', 'Package_TO_SOT_SMD:TO-263-5_TabPin3',
      241.3, 63.5, 0, {'1': 'VIN_BUCK', '2': 'SW', '3': 'GND', '4': 'FB', '5': 'GND'}, False),
     ('D6', 'Device:D_Schottky', 'SS34', SMA, 266.7, 81.28, 0, {'1': 'SW', '2': 'GND'}, False),
-    ('L1', 'Device:L', '120uH', 'Inductor_SMD:L_12x12mm_H4.5mm', 274.32, 58.42, 0, {'1': 'SW', '2': 'V5_BUCK'}, False),
+    ('L1', 'Device:L', '120uH', 'scaner:L_12x12mm_WidePads', 274.32, 58.42, 0, {'1': 'SW', '2': 'V5_BUCK'}, False),
     ('C3', 'Device:C_Polarized', '220u/25V', CP8, 284.48, 71.12, 0, {'1': 'V5_BUCK', '2': 'GND'}, False),
     ('C4', 'Device:C', '100n', C0805, 299.72, 71.12, 0, {'1': 'V5_BUCK', '2': 'GND'}, False),
     ('R3', 'Device:R', '3k0', R0805, 314.96, 63.5, 0, {'1': 'V5_BUCK', '2': 'FB'}, False),
@@ -198,10 +197,8 @@ PARTS = [
     ('C5', 'Device:C', '10u', C0805, 363.22, 66.04, 0, {'1': 'V5', '2': 'GND'}, False),
     # 3. XIAO
     ('U4', 'scaner:XIAO_ESP32C5', 'XIAO_ESP32C5', 'scaner:XIAO_ESP32C5_Socket', 76.2, 172.72, 0,
-     {'1': 'VBAT_ADC', '2': 'CANB_RX', '5': 'RS_A', '6': 'RS_B', '9': 'CANB_TX', '10': 'CANA_RX',
-      '11': 'CANA_TX', '12': '+3V3', '13': 'GND', '14': 'V5'}, False),
-    ('R5', 'Device:R', '10k', R0805, 127.0, 160.02, 0, {'1': '+3V3', '2': 'CANA_TX'}, False),
-    ('R6', 'Device:R', '10k', R0805, 139.7, 160.02, 0, {'1': '+3V3', '2': 'CANB_TX'}, False),
+     {'1': 'VBAT_ADC', '2': 'CANB_TX', '6': 'RS_B', '8': 'CANA_RX', '9': 'CANA_TX', '10': 'RS_A',
+      '11': 'CANB_RX', '12': '+3V3', '13': 'GND', '14': 'V5'}, False),
     ('R11', 'Device:R', '10k', R0805, 152.4, 160.02, 0, {'1': '+3V3', '2': 'RS_A'}, False),
     ('R12', 'Device:R', '10k', R0805, 165.1, 160.02, 0, {'1': '+3V3', '2': 'RS_B'}, False),
     # 4. CAN
@@ -210,6 +207,8 @@ PARTS = [
     ('C6', 'Device:C', '100n', C0805, 190.5, 162.56, 0, {'1': '+3V3', '2': 'GND'}, False),
     ('R7', 'Device:R', '120', R0805, 266.7, 160.02, 0, {'1': 'CANA_H', '2': 'TERM_A'}, False),
     ('JP2', 'Jumper:SolderJumper_2_Open', 'TERM_A', SJ, 281.94, 170.18, 0, {'1': 'TERM_A', '2': 'CANA_L'}, False),
+    ('J2', 'Connector_Generic:Conn_01x04', 'OBD 14 6 8 3', 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical',
+     317.5, 182.88, 0, {'1': 'CANA_L', '2': 'CANA_H', '3': 'CANB_L', '4': 'CANB_H'}, False),
     ('U3', 'Interface_CAN_LIN:SN65HVD230', 'SN65HVD230', 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm',
      228.6, 203.2, 0, {'1': 'CANB_TX', '2': 'GND', '3': '+3V3', '4': 'CANB_RX', '6': 'CANB_L', '7': 'CANB_H', '8': 'RS_B'}, False),
     ('C7', 'Device:C', '100n', C0805, 190.5, 203.2, 0, {'1': '+3V3', '2': 'GND'}, False),
@@ -228,15 +227,15 @@ TEXTS = [
     (190.5, 30.48, 2.0, '2. DC-DC LM2596S-ADJ -> 4,92 В'),
     (20.32, 142.24, 2.0, '3. Seeed XIAO ESP32-C5'),
     (190.5, 142.24, 2.0, '4. CAN: канал A — OBD 6/14, канал B — OBD 3/8 (Diag-on-CAN PSA)'),
-    (20.32, 107.95, 1.27, 'J1 — короткие провода от выводов разъёма в корпусе OBD: 1 = OBD16 (+12 В), 2 = OBD4, 3 = OBD5, 4 = OBD6, 5 = OBD14, 6 = OBD3, 7 = OBD8'),
-    (20.32, 111.76, 1.27, 'D1 1.5KE27A — опция, по умолчанию не ставится (DNP). Повторитель Q1 ограничивает вход LM2596 ~26,5 В'),
+    (20.32, 107.95, 1.27, 'Провода от выводов разъёма OBD: J1 1 = OBD16 (+12 В), 2 = OBD4, 3 = OBD5; J2 (у трансиверов) 1 = OBD14, 2 = OBD6, 3 = OBD8, 4 = OBD3'),
+    (20.32, 111.76, 1.27, 'Повторитель Q1 ограничивает вход LM2596 ~26,5 В (IRFB4110 держит до 100 В)'),
     (20.32, 115.57, 1.27, 'JP1 замкнуть, только если Q1, D3–D5, R1, R2 не установлены (вариант без повторителя)'),
     (20.32, 119.38, 1.27, 'R1 и R9 — корпус 1206: на них бывают десятки вольт. VBAT_ADC: 12 В -> ~1,4 В на D0'),
     (190.5, 107.95, 1.27, 'Uвых = 1,23 x (1 + R3/R4) = 4,92 В; после D7 ~4,6 В — ниже USB, обратно в ноутбук не пойдёт'),
     (190.5, 111.76, 1.27, 'D8 1.5KE6.8CA — страховка: при пробое LM2596 зажимает линию 5V, сгорает F1'),
-    (20.32, 233.68, 1.27, 'Не занимать: D2, D3 (strapping), D6 (лог загрузки). D4/D5 — Rs трансиверов, D7 — резерв'),
+    (20.32, 233.68, 1.27, 'Не занимать: D2, D3 (strapping), D6 (лог загрузки). Свободна D4'),
     (20.32, 237.49, 1.27, 'Посадочное место XIAO — проверить по живой плате (ряды через 15,24 мм)'),
-    (190.5, 233.68, 1.27, 'U2/U3 — SN65HVD230, выпаянные с модулей Waveshare. Rs: 1 (подтяжка) = только слушать, прошивка опускает в 0'),
+    (190.5, 233.68, 1.27, 'U2/U3 — SN65HVD230, выпаянные с модулей Waveshare. Rs: 1 (подтяжка) = только слушать, передатчик выключен; прошивка опускает в 0'),
     (190.5, 237.49, 1.27, 'JP2/JP3 — терминаторы 120 Ом, по умолчанию разомкнуты. Канал B по замеру: между OBD 3 и 8 ~120 Ом -> замкнуть JP3'),
 ]
 
@@ -365,6 +364,7 @@ def main():
         with open(pro, 'w', encoding='utf-8') as fh:
             json.dump({'meta': {'filename': f'{NAME}.kicad_pro', 'version': 3}}, fh, indent=2)
     write_xiao_footprint()
+    write_inductor_footprint()
     with open(os.path.join(HERE, 'expected_nets.json'), 'w', encoding='utf-8') as fh:
         json.dump({k: sorted(v) for k, v in sorted(expected.items())}, fh, ensure_ascii=False, indent=1)
     print(f'ok: {len(PARTS)} деталей, {len(expected)} цепей')
@@ -392,10 +392,38 @@ def write_xiao_footprint():
     ]
     for num, x, y in pads:
         shape = 'rect' if num == '1' else 'circle'
-        lines.append(f'  (pad "{num}" thru_hole {shape} (at {f(x)} {f(y)}) (size 1.7 1.7) (drill 1) '
+        lines.append(f'  (pad "{num}" thru_hole {shape} (at {f(x)} {f(y)}) (size 2 2) (drill 1) '
                      f'(layers "*.Cu" "*.Mask") (uuid "{uid()}"))')
+    lines.append('  (model "${KIPRJMOD}/scaner.3dshapes/XIAO_ESP32C5_on_sockets.wrl" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))')
     lines.append(')')
     with open(os.path.join(PRJ, 'scaner.pretty', 'XIAO_ESP32C5_Socket.kicad_mod'), 'w',
+              encoding='utf-8', newline='\n') as fh:
+        fh.write('\n'.join(lines) + '\n')
+
+
+def write_inductor_footprint():
+    """Дроссель 12x12 мм под живую деталь: выводы — две пластины почти во всё дно, между ними 2 мм.
+    Площадки выходят за корпус на 0,6 мм — туда подходят дорожки и туда греть паяльником.
+    Земли под корпусом нет: запретную зону ставит gen_pcb.py."""
+    lines = [
+        '(footprint "L_12x12mm_WidePads"',
+        '  (version 20241229) (generator "scaner_gen") (layer "F.Cu")',
+        '  (descr "Дроссель 12x12 мм: две площадки 5,6 x 11,2 мм, зазор 2 мм (по живой детали)")',
+        '  (tags "inductor 12x12 SMD")',
+        f'  (property "Reference" "REF**" (at 0 -7.6 0) (layer "F.SilkS") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
+        f'  (property "Value" "L_12x12mm_WidePads" (at 0 7.6 0) (layer "F.Fab") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
+        '  (attr smd)',
+        f'  (fp_rect (start -6 -6) (end 6 6) (stroke (width 0.1) (type solid)) (fill no) (layer "F.Fab") (uuid "{uid()}"))',
+        f'  (fp_rect (start -6.85 -6.35) (end 6.85 6.35) (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd") (uuid "{uid()}"))',
+        f'  (fp_line (start -6 -6.2) (end 6 -6.2) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "{uid()}"))',
+        f'  (fp_line (start -6 6.2) (end 6 6.2) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "{uid()}"))',
+    ]
+    for num, x in (('1', -3.8), ('2', 3.8)):   # как в библиотеке KiCad: вывод 1 слева
+        lines.append(f'  (pad "{num}" smd rect (at {f(x)} 0) (size 5.6 11.2) '
+                     f'(layers "F.Cu" "F.Paste" "F.Mask") (uuid "{uid()}"))')
+    lines.append('  (model "${KIPRJMOD}/scaner.3dshapes/L_12x12mm_WidePads.wrl" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))')
+    lines.append(')')
+    with open(os.path.join(PRJ, 'scaner.pretty', 'L_12x12mm_WidePads.kicad_mod'), 'w',
               encoding='utf-8', newline='\n') as fh:
         fh.write('\n'.join(lines) + '\n')
 

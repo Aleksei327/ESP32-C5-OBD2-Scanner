@@ -41,6 +41,19 @@ static bool IRAM_ATTR on_error(twai_node_handle_t handle, const twai_error_event
     return false;
 }
 
+// TX трансивера держим в 1 («тишина»), пока им не управляет контроллер CAN:
+// подтяжки на D на плате нет, защита — Rs = 1 (передатчик выключен) плюс этот уровень.
+static void tx_idle(can_ch_t *ch)
+{
+    gpio_config_t io = {
+        .pin_bit_mask = 1ULL << ch->tx,
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_set_level(ch->tx, 1);
+    gpio_config(&io);
+    gpio_set_level(ch->tx, 1);
+}
+
 void can_ch_init_pins(can_ch_t *ch)
 {
     gpio_config_t io = {
@@ -50,6 +63,7 @@ void can_ch_init_pins(can_ch_t *ch)
     gpio_set_level(ch->rs, 1);
     gpio_config(&io);
     gpio_set_level(ch->rs, 1);
+    tx_idle(ch);
     if (ch->rxq == NULL) {
         ch->rxq = xQueueCreate(256, sizeof(can_msg_t));
     }
@@ -60,8 +74,8 @@ esp_err_t can_ch_start(can_ch_t *ch, bool listen_only)
     if (ch->node) {
         can_ch_stop(ch);
     }
-    // Сначала трансивер: в режиме «только слушать» его передатчик выключен аппаратно
-    gpio_set_level(ch->rs, listen_only ? 1 : 0);
+    // Трансивер в «только слушать» (Rs = 1), пока контроллер не запущен и не держит на TX «тишину»
+    gpio_set_level(ch->rs, 1);
 
     twai_onchip_node_config_t cfg = {
         .io_cfg = {
@@ -88,6 +102,9 @@ esp_err_t can_ch_start(can_ch_t *ch, bool listen_only)
     };
     ESP_ERROR_CHECK(twai_node_register_event_callbacks(ch->node, &cbs, ch));
     ESP_ERROR_CHECK(twai_node_enable(ch->node));
+    if (!listen_only) {
+        gpio_set_level(ch->rs, 0);  // контроллер уже держит TX в 1 — теперь можно включать передатчик
+    }
     ch->listen_only = listen_only;
     xQueueReset(ch->rxq);
     ESP_LOGI(TAG, "%s: %s, %d бит/с", ch->name, listen_only ? "только слушать" : "работа", CAN_BITRATE);
@@ -103,6 +120,7 @@ esp_err_t can_ch_stop(can_ch_t *ch)
     twai_node_disable(ch->node);
     esp_err_t err = twai_node_delete(ch->node);
     ch->node = NULL;
+    tx_idle(ch);  // вывод отпущен контроллером — снова держим «тишину» сами
     return err;
 }
 
