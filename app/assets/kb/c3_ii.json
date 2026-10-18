@@ -1,0 +1,199 @@
+{
+  "id": "psa_aee2004",
+  "title": "PSA AEE2004 (Citroën C3 II, Peugeot 207/208…)",
+  "note": "Адреса блоков — как у PSA AEE2004. DID живых данных и настроек BSI пока выдуманы под симулятор — заменить на настоящие, когда послушаем машину. Приложение только читает.",
+  "diag_bus": "B",
+  "obd_bus": "A",
+  "bitrate": 500000,
+  "ecus": [
+    {
+      "name": "BSI",
+      "tx": "752",
+      "rx": "652",
+      "proto": "uds",
+      "idents": {
+        "vin": 61840,
+        "part": 61831,
+        "sw": 61845
+      },
+      "config": [
+        {
+          "did": 8705,
+          "name_ru": "Закрывать двери в движении",
+          "name_en": "Auto-lock when driving",
+          "type": "bool"
+        },
+        {
+          "did": 8706,
+          "name_ru": "Дневные ходовые огни",
+          "name_en": "Daytime running lights",
+          "type": "bool"
+        },
+        {
+          "did": 8707,
+          "name_ru": "Сопровождающий свет, с",
+          "name_en": "Follow-me-home light, s",
+          "type": "u8"
+        },
+        {
+          "did": 8708,
+          "name_ru": "Открывать только водительскую",
+          "name_en": "Driver door only",
+          "type": "bool"
+        },
+        {
+          "did": 8709,
+          "name_ru": "Звук при закрытии",
+          "name_en": "Beep on lock",
+          "type": "bool"
+        }
+      ],
+      "icon": "bsi"
+    },
+    {
+      "name": "Двигатель",
+      "name_en": "Engine",
+      "tx": "6A8",
+      "rx": "688",
+      "proto": "uds",
+      "idents": {
+        "vin": 61840
+      },
+      "live": [
+        {
+          "did": 4097,
+          "name_ru": "Обороты",
+          "name_en": "Engine speed",
+          "unit": "rpm",
+          "len": 2,
+          "big": true
+        },
+        {
+          "did": 4098,
+          "name_ru": "Охлаждающая",
+          "name_en": "Coolant",
+          "unit": "°C",
+          "len": 1,
+          "off": -40
+        },
+        {
+          "did": 4099,
+          "name_ru": "Дроссель",
+          "name_en": "Throttle",
+          "unit": "%",
+          "len": 1
+        },
+        {
+          "did": 4100,
+          "name_ru": "Лямбда-зонд",
+          "name_en": "Lambda",
+          "unit": "mV",
+          "len": 2,
+          "big": true
+        },
+        {
+          "did": 4101,
+          "name_ru": "Бортсеть",
+          "name_en": "Supply",
+          "unit": "V",
+          "len": 2,
+          "big": true,
+          "scale": 0.001,
+          "decimals": 1
+        }
+      ],
+      "icon": "engine"
+    },
+    {
+      "name": "ABS/ESP",
+      "tx": "6AD",
+      "rx": "68D",
+      "proto": "uds",
+      "idents": {
+        "vin": 61840
+      },
+      "icon": "abs"
+    },
+    {
+      "name": "Подушки",
+      "name_en": "Airbag",
+      "tx": "744",
+      "rx": "644",
+      "proto": "uds",
+      "idents": {
+        "vin": 61840
+      },
+      "icon": "airbag"
+    },
+    {
+      "name": "Щиток",
+      "name_en": "Cluster",
+      "tx": "75F",
+      "rx": "65F",
+      "proto": "uds",
+      "idents": {
+        "vin": 61840
+      },
+      "icon": "cluster"
+    }
+  ],
+  "dtc": {
+    "U0100": {
+      "ru": "Нет связи с блоком двигателя",
+      "en": "Lost communication with ECM"
+    },
+    "U0155": {
+      "ru": "Нет связи со щитком приборов",
+      "en": "Lost communication with cluster"
+    },
+    "P0130": {
+      "ru": "Датчик кислорода до катализатора — цепь",
+      "en": "O2 sensor circuit (bank 1 sensor 1)"
+    },
+    "P0300": {
+      "ru": "Пропуски зажигания, случайный цилиндр",
+      "en": "Random misfire detected"
+    }
+  },
+  "dids": {
+    "4097": {
+      "name_ru": "Обороты",
+      "name_en": "Engine speed",
+      "unit": "rpm",
+      "len": 2
+    },
+    "4098": {
+      "name_ru": "Охлаждающая",
+      "name_en": "Coolant",
+      "unit": "°C",
+      "len": 1,
+      "off": -40
+    },
+    "4099": {
+      "name_ru": "Дроссель",
+      "name_en": "Throttle",
+      "unit": "%",
+      "len": 1
+    },
+    "4100": {
+      "name_ru": "Лямбда-зонд",
+      "name_en": "Lambda",
+      "unit": "mV",
+      "len": 2
+    },
+    "4101": {
+      "name_ru": "Бортсеть",
+      "name_en": "Supply",
+      "unit": "V",
+      "len": 2,
+      "scale": 0.001,
+      "decimals": 1
+    },
+    "4102": {
+      "name_ru": "Скорость",
+      "name_en": "Speed",
+      "unit": "km/h",
+      "len": 1
+    }
+  }
+}

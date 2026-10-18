@@ -23,3 +23,14 @@ firmware/**/build/
 firmware/**/managed_components/
 firmware/**/sdkconfig.old
 firmware/**/sdkconfig
+
+# VS Code Local History
+.history/
+
+# Flutter (на всякий случай, у app свой .gitignore)
+app/build/
+app/.dart_tool/
+**/.flutter-plugins-dependencies
+
+# Flutter: переводы генерируются из .arb при flutter pub get
+app/lib/l10n/gen/

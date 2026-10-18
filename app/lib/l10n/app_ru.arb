@@ -1,0 +1,182 @@
+{
+  "@@locale": "ru",
+  "appTitle": "Сканер OBD",
+  "garage": "Гараж",
+  "garageSub": "Машины, фото и отчёты хранятся в телефоне",
+  "connect": "Подключить адаптер",
+  "connecting": "Подключаюсь…",
+  "disconnect": "Отключить",
+  "connected": "На связи",
+  "notConnected": "Не подключён",
+  "connectFailed": "Не удалось подключиться: {error}",
+  "@connectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "adapterAddress": "Адрес адаптера",
+  "adapterHint": "ws://192.168.4.1:81/ws или симулятор ws://IP-компьютера:8765",
+  "battery": "АКБ",
+  "volts": "{v} В",
+  "@volts": {
+    "placeholders": {
+      "v": {
+        "type": "String"
+      }
+    }
+  },
+  "faults": "Ошибки",
+  "modules": "Блоков",
+  "autoScan": "Автоскан",
+  "autoScanSub": "Все блоки и ошибки за полминуты",
+  "scanning": "Опрашиваю блоки…",
+  "scanDone": "Скан завершён",
+  "scanSummary": "{ok} в порядке · {bad} с ошибками",
+  "@scanSummary": {
+    "placeholders": {
+      "ok": {
+        "type": "int"
+      },
+      "bad": {
+        "type": "int"
+      }
+    }
+  },
+  "faultCount": "{n, plural, =0{ошибок нет} one{{n} ошибка} few{{n} ошибки} other{{n} ошибок}}",
+  "@faultCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "noAnswer": "не ответил",
+  "rescan": "Сканировать заново",
+  "vin": "VIN",
+  "partNumber": "Номер детали",
+  "software": "Версия ПО",
+  "address": "Адрес",
+  "bus": "Шина",
+  "info": "Инфо",
+  "readFaults": "Прочитать ошибки",
+  "clearFaults": "Сбросить ошибки",
+  "clearConfirm": "Стереть ошибки блока? Активные вернутся сразу, если неисправность ещё есть.",
+  "cancel": "Отмена",
+  "clear": "Стереть",
+  "faultActive": "активна",
+  "faultStored": "сохранена",
+  "noFaults": "Ошибок нет",
+  "unknownFault": "Нет описания в базе",
+  "gauges": "Датчики",
+  "gaugesSub": "Двигатель · в реальном времени",
+  "rpm": "Обороты",
+  "rpmUnit": "об/мин",
+  "coolant": "Охлаждающая",
+  "throttle": "Дроссель",
+  "lambda": "Лямбда-зонд",
+  "onboard": "Бортсеть",
+  "lean": "бедно",
+  "rich": "богато",
+  "busMonitor": "Монитор шины",
+  "busMonitorSub": "Только слушаем — в шину ничего не пишем",
+  "pause": "Пауза",
+  "resume": "Продолжить",
+  "filterId": "Фильтр ID",
+  "frameRate": "{n} ID",
+  "@frameRate": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "settings": "Настройки",
+  "language": "Язык",
+  "theme": "Тема",
+  "themeEngineering": "Инженерная",
+  "themeEngineeringSub": "тёмная, строгая",
+  "themeBright": "Яркая",
+  "themeBrightSub": "светлая, цветная",
+  "general": "Общее",
+  "firmware": "Прошивка",
+  "translationNote": "Тексты приложения лежат в файлах перевода. Новый язык — это один новый файл.",
+  "navCar": "Машина",
+  "navModules": "Блоки",
+  "navGauges": "Датчики",
+  "navBus": "Шина",
+  "needConnection": "Сначала подключи адаптер",
+  "photos": "Фото машины",
+  "photosCount": "{n} из 5",
+  "@photosCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "addPhoto": "Добавить",
+  "hz": "Гц",
+  "dataCol": "Данные",
+  "voltUnit": "В",
+  "errTimeout": "Адаптер не ответил. Проверь адрес и что телефон в той же сети.",
+  "errRefused": "По этому адресу никто не слушает. Симулятор или адаптер включён?",
+  "error": "Ошибка: {msg}",
+  "@error": {
+    "placeholders": {
+      "msg": {
+        "type": "String"
+      }
+    }
+  },
+  "arrows": "Стрелки",
+  "graphs": "Графики",
+  "pickSensor": "Какой датчик показать",
+  "gaugesHint": "Нажми на прибор, чтобы выбрать датчик.",
+  "camera": "Камера",
+  "gallery": "Галерея",
+  "deletePhoto": "Удалить фото",
+  "configTab": "Опции",
+  "currentCar": "выбрана",
+  "neverScanned": "ещё не сканировали",
+  "lastScanAt": "скан {date}",
+  "edit": "Изменить",
+  "carName": "Название",
+  "carSub": "Мотор, год",
+  "save": "Сохранить",
+  "deleteCar": "Удалить",
+  "deleteCarConfirm": "Удалить машину и её фото из телефона?",
+  "garageHint": "Новая машина добавится сама по VIN после автоскана.",
+  "@lastScanAt": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "freezeFrame": "Стоп-кадр в момент ошибки",
+  "noFreezeFrame": "Блок не сохранил стоп-кадр для этой ошибки.",
+  "report": "Отчёт",
+  "reportTitle": "Отчёт диагностики",
+  "reportDate": "Дата",
+  "reportFooter": "Сделано приложением OBD Scanner. Расшифровки ошибок — справочные.",
+  "discover": "Поиск блоков",
+  "discoverSub": "Перебираю все адреса на шине 3/8…",
+  "discoverDone": "Поиск закончен",
+  "discoverFound": "{n, plural, =0{пока никого} one{нашёл {n}} few{нашёл {n}} other{нашёл {n}}}",
+  "unknownModule": "Неизвестный блок",
+  "inKb": "в базе",
+  "notInKb": "нет в базе",
+  "discoverHint": "Перебор всех адресов на шине, около 30 с",
+  "@discoverFound": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "recordLog": "Записать лог в CSV",
+  "stopLog": "Остановить и сохранить",
+  "record": "Запись"
+}

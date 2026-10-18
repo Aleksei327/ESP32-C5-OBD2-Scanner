@@ -1,0 +1,5 @@
+# Тесты с тегом "sim" требуют запущенного симулятора (python sim/c3_sim.py).
+# По умолчанию их пропускаем, чтобы обычный `flutter test` не зависел от него.
+tags:
+  sim:
+    skip: "нужен запущенный симулятор: python sim/c3_sim.py, затем flutter test --tags sim --run-skipped"
