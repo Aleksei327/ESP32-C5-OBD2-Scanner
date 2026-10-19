@@ -41,7 +41,20 @@ class SettingsScreen extends StatelessWidget {
               _row(context, t.battery, t.volts(app.batteryText)),
               Divider(color: p.border, height: 1),
               _row(context, t.adapterAddress, app.adapterUrl),
+              if (app.kb != null) ...[
+                Divider(color: p.border, height: 1),
+                _row(context, t.knowledgeBase,
+                    '${app.kb!.source['name'] ?? ''} · ${(app.kb!.source['commit'] as String? ?? '').padRight(7).substring(0, 7)}'),
+              ],
             ]),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => showLicensePage(context: context, applicationName: 'OBD Scanner'),
+              icon: const Icon(Icons.description_outlined),
+              label: Text(t.licenses),
+            ),
           ),
           const SizedBox(height: 16),
           Row(children: [

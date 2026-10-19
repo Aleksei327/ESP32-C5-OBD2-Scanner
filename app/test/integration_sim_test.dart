@@ -1,78 +1,75 @@
 @Tags(['sim'])
 library;
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scaner_app/kb/knowledge_base.dart';
 import 'package:scaner_app/state/diag_service.dart';
 import 'package:scaner_app/transport/adapter_client.dart';
-import 'package:scaner_app/transport/uds.dart';
+import 'package:scaner_app/transport/diag.dart';
+import 'package:scaner_app/transport/obd.dart';
 
-/// Весь стек приложения (транспорт + UDS + диагностика) против живого симулятора.
+/// Весь стек приложения (транспорт + KWP/UDS + диагностика + база знаний) против живого симулятора.
 ///   python sim/c3_sim.py
 ///   flutter test --tags sim --run-skipped
 void main() {
-  test('подключение, автоскан, ошибки, настройки, OBD-II', () async {
-    final kb = KnowledgeBase(_kb());
+  test('подключение, автоскан, опознание моделей, данные, ошибки, OBD-II', () async {
+    final kb = KnowledgeBase(jsonDecode(File('assets/kb/c3_ii.json').readAsStringSync()) as Map<String, dynamic>);
     final client = AdapterClient();
     final hello = await client.connect('ws://127.0.0.1:8765');
     expect(hello['ok'], true);
 
     final diag = DiagService(client, kb);
     final results = await diag.autoScan().toList();
-    expect(results.where((r) => r.answered).length, 5);
-    final bsi = results.firstWhere((r) => r.def.name == 'BSI');
-    expect(bsi.dtcs.map((d) => d.code), containsAll(['U0100', 'U0155']));
+    final answered = {for (final r in results.where((r) => r.answered)) r.def.node: r};
+    expect(answered.keys, unorderedEquals(['BSI', 'CMM', 'ABS', 'RBG', 'CMB']));
+    // модели опознаны по номерам деталей
+    expect({for (final r in answered.values) r.def.node: r.model?.name},
+        {'BSI': 'BSI', 'CMM': 'V46', 'ABS': 'ESPMK100', 'RBG': 'SAC_AUTOLIV', 'CMB': 'CLUSTER'});
+    expect(answered.values.every((r) => r.proto is Kwp), true);
 
-    final id = await diag.identify(bsi.def);
-    expect(id['vin'], isNotEmpty);
+    final bsi = answered['BSI']!;
+    expect(bsi.dtcs.length, 2);
+    final info = await diag.identify(bsi.def);
+    expect(info.vin, 'VF7SIMULATORC3001');
+    expect(await diag.carVin(answered.values.toList()), 'VF7SIMULATORC3001');
 
-    final cfg = await diag.readConfig(bsi.def);
-    expect(cfg.length, bsi.def.config.length);
+    // двигатель: ошибки с текстами и живые данные из записи C0
+    final eng = answered['CMM']!;
+    expect(eng.dtcs.map((d) => d.code), containsAll(['P0130', 'P0300']));
+    expect(eng.dtcs.firstWhere((d) => d.code == 'P0130').active, true);
+    expect(diag.dtcText(eng.def, eng.dtcs.first, 'en'), isNotEmpty);
+    final c0 = diag.records(eng.def, 'live').firstWhere((r) => r.label == 'C0');
+    final live = await diag.readRecord(eng.def, c0);
+    final rpm = live.firstWhere((v) => v.$1.key == 'ENGINE_SPEED').$2.number!;
+    expect(rpm, greaterThan(500));
+    final cool = live.firstWhere((v) => v.$1.key == 'ENGINE_COOLANT_TEMPERATURE').$2.number!;
+    expect(cool, inInclusiveRange(55, 95));
+    // у KWP-блоков PSA стоп-кадра нет — пусто, без ошибки
+    expect(await diag.readSnapshot(eng.def, eng.dtcs.first), isEmpty);
 
-    // стоп-кадр ошибки двигателя P0130
-    final eng = results.firstWhere((r) => r.def.name == 'Двигатель');
-    final p0130 = eng.dtcs.firstWhere((d) => d.code == 'P0130');
-    final snap = await diag.readSnapshot(eng.def, p0130);
-    expect(snap.map((s) => s.$1.did), containsAll([4097, 4098, 4102]));
-    expect(snap.firstWhere((s) => s.$1.did == 4097).$2, 2140);
+    // сеанс KWP гаснет через 5 с — приложение должно переоткрыть его само
+    await Future.delayed(const Duration(seconds: 6));
+    expect((await diag.readRecord(eng.def, c0)).isNotEmpty, true);
 
-    // поиск блоков: 5 из базы + 2 «чужих» в симуляторе
+    // сброс: сохранённая уходит, та, что есть сейчас, остаётся
+    await diag.clearFaults(eng.def);
+    expect((await diag.readFaults(eng.def)).map((d) => d.code), ['P0130']);
+
+    // поиск блоков: кто из базы и 2 «чужих» в симуляторе
     final steps = await diag.discover().toList();
     final found = steps.last.found.map((f) => f.$1).toSet();
-    expect(found, containsAll([0x752, 0x6A8, 0x6AD, 0x744, 0x75F, 0x76D, 0x6B5]));
+    expect(found, containsAll([0x752, 0x6A8, 0x6AD, 0x744, 0x75F, 0x6B1, 0x77A]));
     // адрес ответа — настоящий, а не угаданный
-    expect(steps.last.found, containsAll([(0x6A8, 0x688), (0x752, 0x652), (0x6AD, 0x68D)]));
+    expect(steps.last.found, containsAll([(0x6A8, 0x688), (0x752, 0x652), (0x6B1, 0x691)]));
 
     await client.openBus('A', listen: false);
     final obd = Obd(client);
     expect(await obd.rpm(), greaterThan(0));
-    expect(await obd.vin(), id['vin']);
+    expect(await obd.vin(), info.vin);
 
     await client.close();
-  }, timeout: const Timeout(Duration(seconds: 120)));
+  }, timeout: const Timeout(Duration(seconds: 180)));
 }
-
-Map<String, dynamic> _kb() => {
-      'diag_bus': 'B',
-      'dids': {
-        '4097': {'name_ru': 'Обороты', 'unit': 'rpm', 'len': 2},
-        '4098': {'name_ru': 'Охлаждающая', 'unit': '°C', 'len': 1, 'off': -40},
-        '4099': {'name_ru': 'Дроссель', 'unit': '%', 'len': 1},
-        '4101': {'name_ru': 'Бортсеть', 'unit': 'V', 'len': 2, 'scale': 0.001},
-        '4102': {'name_ru': 'Скорость', 'unit': 'km/h', 'len': 1},
-      },
-      'ecus': [
-        {
-          'name': 'BSI', 'tx': '752', 'rx': '652',
-          'idents': {'vin': 61840},
-          'config': [
-            {'did': 8705, 'name_ru': 'Закрывать двери', 'type': 'bool'},
-            {'did': 8706, 'name_ru': 'ДХО', 'type': 'bool'},
-          ]
-        },
-        {'name': 'Двигатель', 'tx': '6A8', 'rx': '688', 'idents': {'vin': 61840}},
-        {'name': 'ABS/ESP', 'tx': '6AD', 'rx': '68D', 'idents': {'vin': 61840}},
-        {'name': 'Подушки', 'tx': '744', 'rx': '644', 'idents': {'vin': 61840}},
-        {'name': 'Щиток', 'tx': '75F', 'rx': '65F', 'idents': {'vin': 61840}},
-      ],
-    };

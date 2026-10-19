@@ -34,3 +34,6 @@ app/.dart_tool/
 
 # Flutter: переводы генерируются из .arb при flutter pub get
 app/lib/l10n/gen/
+
+# Скачанный архив PSA-RE и списки для перевода (app/tool/build_kb.py)
+app/tool/.cache/

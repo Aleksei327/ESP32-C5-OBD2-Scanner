@@ -166,7 +166,7 @@ class _CarScreenState extends State<CarScreen> {
                 const SizedBox(width: 10),
                 Expanded(child: _stat(context, t.faults, faults == null ? '—' : '$faults', p.bad, () => app.tab.value = 1)),
                 const SizedBox(width: 10),
-                Expanded(child: _stat(context, t.modules, '${app.lastAnswered ?? app.kb?.ecus.length ?? '—'}', p.info, () => app.tab.value = 1)),
+                Expanded(child: _stat(context, t.modules, '${app.lastAnswered ?? '—'}', p.info, () => app.tab.value = 1)),
               ],
             ),
             const SizedBox(height: 14),
@@ -205,7 +205,7 @@ class _CarScreenState extends State<CarScreen> {
         type: MaterialType.transparency,
         child: InkWell(
           borderRadius: radius,
-          onTap: () => app.tab.value = 1,
+          onTap: app.requestScan,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Row(

@@ -73,7 +73,11 @@ The ECU's answer is returned as is, including negative responses (`7F 22 31` etc
 
 ## On top of it (in the app)
 
-The app and the simulator currently speak UDS (ISO 14229): `10` session, `22` read, `19` fault codes, `14` clear fault codes, `3E` tester present.
-This is the common language of modern cars. The BSI of the C3 II (AEE2004) partly speaks KWP2000 — that will go into the knowledge base once we listen to the real car.
+The app talks to the ECUs in two languages over the same ISO-TP — the adapter does not care:
+
+- **PSA-style KWP2000** — most AEE2004 ECUs, including almost all of them on the C3 II: session `81` (IS bus ECUs: engine, ABS…) or `10 C0` (BSI and cabin ECUs), records read with `21 xx`, fault codes `17 FF 00` (answer `57 <count> {code(2) status}`), clearing `14 FF 00`, tester present `3E`. The session drops after a few seconds without requests — the app reopens it by itself.
+- **UDS** (ISO 14229) — newer ECUs: `10` session, `22` read, `19` fault codes and freeze frames, `14` clear, `3E 00` tester present.
+
+The app finds out which language an ECU speaks by itself (it tries a KWP session, then `3E 00`), and which ECU model it is from the part number in the identification answer. All of this is in the knowledge base (`app/assets/kb/c3_ii.json`, built from [PSA-RE](https://github.com/prototux/PSA-RE) by `app/tool/build_kb.py`).
 
 On bus A (OBD 6/14) it is plain OBD-II: `7DF`/`7E8`, modes `01`, `03`, `04`, `09`.

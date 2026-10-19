@@ -19,6 +19,13 @@ class AppState extends ChangeNotifier {
     adapterUrl = _prefs.getString('url') ?? 'ws://192.168.4.1:81/ws';
     final slots = _prefs.getStringList('gauges');
     if (slots != null && slots.length == defaultGaugeSlots.length) gaugeSlots = slots;
+    gaugeMode = (_prefs.getInt('gaugeMode') ?? 0).clamp(0, 2);
+    graphMain = _prefs.getStringList('graphMain') ?? List.of(defaultGraphMain);
+    final gs = _prefs.getStringList('graphSlots');
+    if (gs != null && gs.length == maxGraphs) graphSlots = gs;
+    graphCount = (_prefs.getInt('graphCount') ?? 4).clamp(minGraphs, maxGraphs);
+    final ns = _prefs.getStringList('numSlots');
+    if (ns != null && ns.length == maxNumbers) numSlots = ns;
   }
 
   /// Какая вкладка открыта внизу (плитки на главном экране переключают её).
@@ -33,12 +40,64 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Режим экрана «Датчики»: 0 — стрелки, 1 — цифры, 2 — графики.
+  int gaugeMode = 0;
+  void setGaugeMode(int m) {
+    gaugeMode = m;
+    _prefs.setInt('gaugeMode', m);
+    notifyListeners();
+  }
+
+  /// Графики: главный сверху (до 5 датчиков сразу) и [graphCount] одиночных под ним.
+  static const minGraphs = 2, maxGraphs = 10, maxOnMainGraph = 5;
+  List<String> graphMain = List.of(defaultGraphMain);
+  List<String> graphSlots = List.of(defaultGraphSlots);
+  int graphCount = 4;
+
+  void setGraphMain(List<String> ids) {
+    graphMain = ids.take(maxOnMainGraph).toList();
+    _prefs.setStringList('graphMain', graphMain);
+    notifyListeners();
+  }
+
+  void setGraphSlot(int i, String id) {
+    graphSlots[i] = id;
+    _prefs.setStringList('graphSlots', graphSlots);
+    notifyListeners();
+  }
+
+  void setGraphCount(int n) {
+    graphCount = n.clamp(minGraphs, maxGraphs);
+    _prefs.setInt('graphCount', graphCount);
+    notifyListeners();
+  }
+
+  /// Цифры: плашки по порядку; на экране столько, сколько влезет.
+  static const maxNumbers = 30;
+  List<String> numSlots = List.of(defaultNumSlots);
+  void setNumSlot(int i, String id) {
+    numSlots[i] = id;
+    _prefs.setStringList('numSlots', numSlots);
+    notifyListeners();
+  }
+
   /// Гараж: машины, текущая машина, итоги их сканов.
   late final Garage garage = Garage(_prefs);
   CarProfile get car => garage.current;
   String? get vin => car.vin;
   int? get lastFaults => car.lastFaults;
-  int? lastAnswered; // сколько блоков ответило в этом подключении
+  int? get lastAnswered => car.lastModules; // сколько блоков ответило на последнем скане
+
+  /// Итог последнего автоскана в этом подключении: экран «Блоки» показывает его,
+  /// а не сканирует заново. Новый скан — по кнопке «Автоскан» или «обновить».
+  List<EcuResult> scanResults = [];
+  bool scanRequested = false;
+
+  /// Кнопка «Автоскан»: открыть «Блоки» и опросить машину заново.
+  void requestScan() {
+    scanRequested = true;
+    tab.value = 1;
+  }
 
   /// Прочитали VIN: выбираем эту машину в гараже или заводим новую.
   void setVin(String v) {
@@ -48,15 +107,15 @@ class AppState extends ChangeNotifier {
 
   void setScanResult({required int faults, required int answered}) {
     car.lastFaults = faults;
+    car.lastModules = answered;
     car.lastScan = DateTime.now();
-    lastAnswered = answered;
     garage.save();
     notifyListeners();
   }
 
   void selectCar(String id) {
     garage.select(id);
-    lastAnswered = null;
+    scanResults = [];
     notifyListeners();
   }
 
@@ -121,8 +180,9 @@ class AppState extends ChangeNotifier {
       final hello = await client.connect(adapterUrl);
       fw = hello['fw']?.toString() ?? '';
       batteryMv = (hello['mv'] as num?)?.toInt() ?? 0;
-      kb ??= await KnowledgeBase.load('assets/kb/c3_ii.json');
+      kb ??= await KnowledgeBase.load('assets/kb/c3_ii.json', extraDtc: 'assets/kb/c3_ii_dtc_gpl.json');
       diag = DiagService(client, kb!);
+      scanResults = [];
       _evSub = client.events.listen(_onEvent);
     } catch (e) {
       connectError = e.toString();

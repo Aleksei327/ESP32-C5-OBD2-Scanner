@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'l10n/gen/app_localizations.dart';
@@ -13,7 +15,29 @@ import 'ui/widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _registerLicenses();
   runApp(ScanerApp(await AppState.create()));
+}
+
+/// Чужие данные и шрифты в приложении — с их лицензиями (Настройки → Лицензии).
+void _registerLicenses() {
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(
+        ['PSA-RE (knowledge base data, github.com/prototux/PSA-RE)'], await rootBundle.loadString('assets/kb/PSA-RE-LICENCE.txt'));
+    yield LicenseEntryWithLineBreaks(
+        ['ludwig-v/arduino-psa-diag (extra PSA fault code texts, assets/kb/c3_ii_dtc_gpl.json)'],
+        await rootBundle.loadString('assets/kb/GPL-3.0.txt'));
+    yield const LicenseEntryWithLineBreaks(['OBD Codes List (generic SAE J2012 fault code texts)'],
+        'Code data from OBD Codes List, https://obdcodeslist.com/code-data.html\n'
+        'via github.com/tekseport/obd2-codes. Free to use, including commercial use, with this attribution.');
+    for (final (name, file) in const [
+      ('Exo 2', 'OFL-exo2.txt'),
+      ('IBM Plex Sans', 'OFL-ibmplexsans.txt'),
+      ('IBM Plex Mono', 'OFL-ibmplexmono.txt'),
+    ]) {
+      yield LicenseEntryWithLineBreaks([name], await rootBundle.loadString('assets/google_fonts/$file'));
+    }
+  });
 }
 
 /// Делает AppState доступным через AppScope.of(context) и пересобирает дерево.

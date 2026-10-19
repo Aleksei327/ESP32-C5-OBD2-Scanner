@@ -46,7 +46,7 @@ PDF: [схема](hardware/scaner_v1/build/scaner_v1.pdf), [расстановк
 ## Что известно про C3 (PSA, архитектура AEE2004/2010)
 
 - Полная диагностика идёт по пинам **3/8** (Diag-on-CAN, 500 кбит/с) через BSI. По **6/14** доступен только стандартный OBD-II двигателя.
-- Протоколы: KWP2000 и UDS поверх CAN (ISO-TP).
+- Протоколы: KWP2000 по-PSA (почти все блоки C3 II) и UDS, оба поверх CAN (ISO-TP). На каком говорит блок, приложение узнаёт само, а модель блока — по номеру детали.
 - Адреса блоков (запрос:ответ): BSI `752:652`, двигатель `6A8:688`, ABS/ESP `6AD:68D`, подушки `744:644`, приборка `75F:65F`.
 - Какой стоит блок двигателя, пока неизвестно — покажет сканер.
 
@@ -58,9 +58,11 @@ PDF: [схема](hardware/scaner_v1/build/scaner_v1.pdf), [расстановк
 
 ## Благодарности и сторонние проекты
 
-Чужой код в репозиторий не копировался. Использовали или опирались на:
+Чужой код в репозиторий не копировался. База знаний приложения собирается из данных PSA-RE, тексты ошибок дополнены из ludwig-v и OBD Codes List (см. ниже). Использовали или опирались на:
 
-- [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) — адреса блоков PSA ([ECU_LIST.md](https://github.com/ludwig-v/arduino-psa-diag/blob/master/ECU_LIST.md)).
+- [prototux/PSA-RE](https://github.com/prototux/PSA-RE) (Apache-2.0) — разбор электроники PSA: какие блоки стоят на C3 II, их адреса, протоколы, номера деталей, записи данных и тексты ошибок. База знаний приложения ([`app/assets/kb/`](app/assets/kb/)) собирается из него скриптом [`app/tool/build_kb.py`](app/tool/build_kb.py); текст его лицензии лежит рядом с данными.
+- [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) (GPL-3.0) — адреса блоков PSA ([ECU_LIST.md](https://github.com/ludwig-v/arduino-psa-diag/blob/master/ECU_LIST.md)) и команды KWP/UDS, для сверки. Из его списков ошибок взяты тексты кодов, которых нет в PSA-RE (в основном BSI); они лежат отдельным файлом данных под GPL-3.0 — [`app/assets/kb/c3_ii_dtc_gpl.json`](app/assets/kb/c3_ii_dtc_gpl.json), текст лицензии рядом.
+- [OBD Codes List](https://obdcodeslist.com/code-data.html) через [tekseport/obd2-codes](https://github.com/tekseport/obd2-codes) — общие тексты кодов SAE J2012: показываются, когда в списке самого блока текста нет. Code data from OBD Codes List, https://obdcodeslist.com/code-data.html
 - [KiCad](https://www.kicad.org/) и его официальные библиотеки символов, посадочных мест и 3D-моделей.
 - [Freerouting](https://github.com/freerouting/freerouting) — пробовали автороутер для оценки разводки (`hardware/scaner_v1/tools/route.py`); итоговая разводка ручная.
 - [ESP-IDF](https://github.com/espressif/esp-idf) (Espressif) — основа прошивки; [вики Seeed Studio](https://wiki.seeedstudio.com/xiao_esp32c5_getting_started/) — распиновка XIAO ESP32-C5.

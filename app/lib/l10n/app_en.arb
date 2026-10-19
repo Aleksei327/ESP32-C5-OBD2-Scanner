@@ -38,6 +38,7 @@
   "faultStored": "stored",
   "noFaults": "No faults",
   "unknownFault": "No description in the database",
+  "genericSae": "generic SAE description",
   "gauges": "Gauges",
   "gaugesSub": "Engine · live",
   "rpm": "Engine speed",
@@ -112,5 +113,45 @@
   "discoverHint": "Tries every address on the bus, about 30 s",
   "recordLog": "Record CSV log",
   "stopLog": "Stop and save",
-  "record": "Record"
+  "record": "Record",
+  "model": "Model",
+  "modelUnknown": "not identified",
+  "chooseModel": "Choose model",
+  "chooseModelHint": "The part number is not in the database. Choose the ECU model to decode its data.",
+  "protocol": "Protocol",
+  "softwareVariant": "Software variant",
+  "noData": "The database has no such data for this ECU model",
+  "readFailed": "The ECU did not return this data",
+  "knowledgeBase": "Knowledge base",
+  "licenses": "Licenses",
+  "numbers": "Numbers",
+  "graphsBelow": "How many graphs below the main one",
+  "pickSensorsMain": "Main graph: up to {n} sensors",
+  "@pickSensorsMain": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "done": "Done",
+  "ofTotal": "of {n}",
+  "@ofTotal": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "scanFound": "{n} of {total} answered",
+  "@scanFound": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

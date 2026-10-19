@@ -9,7 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../state/app_state.dart';
 import '../state/diag_service.dart';
-import 'ecu_detail_screen.dart' show liveUnit;
+import 'ecu_detail_screen.dart' show formatValue, liveUnit;
 
 /// Отчёт по автоскану в PDF: машина, блоки, ошибки с расшифровкой и стоп-кадрами.
 /// Делается на телефоне и отдаётся в «Поделиться» (мессенджер, почта, диск).
@@ -35,8 +35,7 @@ class ScanReport {
         try {
           final s = await app.diag!.readSnapshot(r.def, d);
           snaps['${r.def.tx}:${d.code}'] = [
-            for (final (item, v) in s)
-              '${item.nameFor(lang)} ${v.toStringAsFixed(item.decimals).replaceAll('.', ',')} ${liveUnit(item.unit, t, lang)}'
+            for (final (p, v) in s) '${p.nameFor(lang)} ${formatValue(p, v, t, lang)} ${liveUnit(p.units, t, lang)}'.trim()
           ];
         } catch (_) {}
       }
@@ -116,7 +115,12 @@ class ScanReport {
                   pw.SizedBox(width: 52, child: pw.Text(d.code, style: pw.TextStyle(font: mono, fontSize: 10, color: ink))),
                   pw.Expanded(
                     child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                      pw.Text(app.kb?.dtcText(d.code, lang) ?? t.unknownFault, style: const pw.TextStyle(fontSize: 10)),
+                      pw.Text(
+                          switch (app.diag?.dtcInfo(r.def, d, lang)) {
+                            null => t.unknownFault,
+                            final i => i.generic ? '${i.text} (${t.genericSae})' : i.text,
+                          },
+                          style: const pw.TextStyle(fontSize: 10)),
                       if (snaps['${r.def.tx}:${d.code}']?.isNotEmpty ?? false)
                         pw.Text('${t.freezeFrame}: ${snaps['${r.def.tx}:${d.code}']!.join(' · ')}',
                             style: pw.TextStyle(fontSize: 8.5, color: dim)),

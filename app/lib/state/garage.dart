@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Машина в гараже. Фото лежат в папке по [id] (см. PhotoStore).
 class CarProfile {
-  CarProfile({required this.id, this.vin, required this.name, this.sub = '', this.lastScan, this.lastFaults});
+  CarProfile({required this.id, this.vin, required this.name, this.sub = '', this.lastScan, this.lastFaults, this.lastModules});
 
   final String id;
   String? vin;
@@ -12,6 +12,7 @@ class CarProfile {
   String sub; // мотор, год — пишет пользователь
   DateTime? lastScan;
   int? lastFaults;
+  int? lastModules; // сколько блоков ответило на последнем скане
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -20,6 +21,7 @@ class CarProfile {
         'sub': sub,
         'lastScan': lastScan?.millisecondsSinceEpoch,
         'lastFaults': lastFaults,
+        'lastModules': lastModules,
       };
 
   factory CarProfile.fromJson(Map<String, dynamic> j) => CarProfile(
@@ -29,6 +31,7 @@ class CarProfile {
         sub: j['sub'] as String? ?? '',
         lastScan: j['lastScan'] == null ? null : DateTime.fromMillisecondsSinceEpoch(j['lastScan'] as int),
         lastFaults: j['lastFaults'] as int?,
+        lastModules: j['lastModules'] as int?,
       );
 }
 

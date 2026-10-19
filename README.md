@@ -46,7 +46,7 @@ PDF exports: [schematic](hardware/scaner_v1/build/scaner_v1.pdf), [placement and
 ## What is known about the C3 (PSA, AEE2004/2010 architecture)
 
 - Full diagnostics run on pins **3/8** (Diag-on-CAN, 500 kbit/s) through the BSI. Pins **6/14** only give legislated engine OBD-II.
-- Protocols: KWP2000 and UDS over CAN (ISO-TP).
+- Protocols: PSA-style KWP2000 (almost every ECU of the C3 II) and UDS, both over CAN (ISO-TP). The app finds out by itself which one an ECU speaks and recognises the ECU model by its part number.
 - ECU addresses (request:response): BSI `752:652`, engine `6A8:688`, ABS/ESP `6AD:68D`, airbag `744:644`, instrument cluster `75F:65F`.
 - Which engine ECU is fitted is not known yet; the scanner will tell.
 
@@ -58,9 +58,11 @@ PDF exports: [schematic](hardware/scaner_v1/build/scaner_v1.pdf), [placement and
 
 ## Credits and third-party work
 
-No third-party code is copied into this repository. These projects, tools and libraries were used or consulted:
+No third-party code is copied into this repository. The app's knowledge base is generated from PSA-RE data, with extra fault-code texts from ludwig-v and OBD Codes List (see below). These projects, tools and libraries were used or consulted:
 
-- [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) — PSA ECU addresses ([ECU_LIST.md](https://github.com/ludwig-v/arduino-psa-diag/blob/master/ECU_LIST.md)).
+- [prototux/PSA-RE](https://github.com/prototux/PSA-RE) (Apache-2.0) — PSA electronics reverse engineering: which ECUs the C3 II has, their addresses, protocols, part numbers, data records and fault-code texts. The app's knowledge base ([`app/assets/kb/`](app/assets/kb/)) is built from it by [`app/tool/build_kb.py`](app/tool/build_kb.py); its licence text ships with the data.
+- [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) (GPL-3.0) — PSA ECU addresses ([ECU_LIST.md](https://github.com/ludwig-v/arduino-psa-diag/blob/master/ECU_LIST.md)) and KWP/UDS commands, used as a cross-check. Its fault-code lists fill the codes PSA-RE has no text for (mostly the BSI); they ship as a separate data file under GPL-3.0, [`app/assets/kb/c3_ii_dtc_gpl.json`](app/assets/kb/c3_ii_dtc_gpl.json), with the licence text next to it.
+- [OBD Codes List](https://obdcodeslist.com/code-data.html) via [tekseport/obd2-codes](https://github.com/tekseport/obd2-codes) — generic SAE J2012 fault-code texts, shown when an ECU's own list has no text for a code. Code data from OBD Codes List, https://obdcodeslist.com/code-data.html
 - [KiCad](https://www.kicad.org/) and its official symbol, footprint and 3D-model libraries.
 - [Freerouting](https://github.com/freerouting/freerouting) — used to explore routing (`hardware/scaner_v1/tools/route.py`); the final layout is routed by hand.
 - [ESP-IDF](https://github.com/espressif/esp-idf) (Espressif) — firmware framework; [Seeed Studio wiki](https://wiki.seeedstudio.com/xiao_esp32c5_getting_started/) — XIAO ESP32-C5 pinout.

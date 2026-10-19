@@ -7,23 +7,27 @@
   python sim/c3_sim.py                 # слушать на 0.0.0.0:8765
   python sim/c3_sim.py --engine-off    # зажигание есть, мотор не крутится
 
-Шина B (OBD 3/8): блоки отвечают на UDS (ISO 14229). Адреса BSI/двигателя/ABS/подушек/щитка —
-как у PSA AEE2004. Идентификаторы (DID) живых данных и настроек BSI — выдуманные для
-симулятора: настоящие узнаем, когда послушаем машину. Запись в блоки симулятор
-не даёт: отвечает отказом, как блок без доступа.
-Шина A (OBD 6/14): обычный OBD-II, 7DF/7E0 -> 7E8, режимы 01, 03, 04, 09.
+Шина B (OBD 3/8): блоки говорят на KWP2000 по-PSA, как на настоящей C3 II (AEE2004):
+сеанс 81 или 10 C0, чтение записей 21 xx, ошибки 17 FF 00, сброс 14 FF 00.
+Какие стоят модели, их адреса, номера деталей и раскладка данных — из базы знаний
+приложения (app/assets/kb/c3_ii.json, собрана из PSA-RE), значения — от «машины» ниже.
+Запись в блоки симулятор не даёт: отвечает отказом, как блок без доступа.
+Шина A (OBD 6/14): обычный OBD-II, 7DF/7E0 -> 7E8, режимы 01, 02, 03, 04, 09.
 """
 import argparse
 import asyncio
 import json
 import math
+import os
 import random
 import time
 
 import websockets
 
-FW = 'sim-0.1.0'
+FW = 'sim-0.2.0'
 VIN = 'VF7SIMULATORC3001'          # 17 знаков, заведомо не настоящий
+KB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'app', 'assets', 'kb', 'c3_ii.json')
+KWP_IDLE_S = 5.0                   # сеанс KWP гаснет без запросов
 
 
 def hx(b):
@@ -78,121 +82,201 @@ class Car:
         r = self.rpm
         return 3 if r < 1000 else min(100, r // 60)
 
+    @property
+    def speed(self):
+        return max(0, (self.rpm - 800) // 40)
 
-class Ecu:
-    """Блок на шине B, UDS."""
 
-    def __init__(self, name, bus, tx, rx, dtcs=(), dids=None, cfg=None):
-        self.name, self.bus, self.tx, self.rx = name, bus, tx, rx
-        self.dtcs = list(dtcs)                 # [(3 байта DTC, байт статуса)]
-        self.dids = dict(dids or {})           # DID -> bytes или f(car) -> bytes
-        self.cfg = dict(cfg or {})             # DID -> bytearray, их можно писать
-        self.snapshots = {}                    # DTC (3 байта) -> [(DID, bytes)] — стоп-кадр
-        self.session = 1
-        self.unlocked = False
-        self.seed = None
+# ---------- значения по раскладке PSA-RE: "<байт>.<бит>-<байт>.<бит>" ----------
 
-    def read_did(self, did, car):
-        if did in self.cfg:
-            return bytes(self.cfg[did])
-        v = self.dids.get(did)
-        return v(car) if callable(v) else v
+def _pos(s):
+    b, bit = s.split('.')
+    return (int(b) - 1) * 8 + (7 - int(bit))
 
-    def routine(self, rid, args, sim):
-        return None
+
+def bit_range(spec, nbytes):
+    if '-' in spec:
+        a, b = spec.split('-')
+        return _pos(a), (nbytes * 8 - 1 if b == 'n' else _pos(b))
+    return _pos(spec), _pos(spec)
+
+
+def put(buf, spec, raw):
+    s, e = bit_range(spec, len(buf))
+    n = e - s + 1
+    raw &= (1 << n) - 1
+    for i in range(n):
+        idx = s + i
+        mask = 0x80 >> (idx & 7)
+        if (raw >> (n - 1 - i)) & 1:
+            buf[idx >> 3] |= mask
+        else:
+            buf[idx >> 3] &= ~mask & 0xFF
+
+
+def put_bytes(buf, spec, data):
+    s, e = bit_range(spec, len(buf))
+    first, last = s >> 3, e >> 3
+    data = data[:last - first + 1].ljust(last - first + 1, b'\x00')
+    buf[first:last + 1] = data
+
+
+def bcd_bytes(digits):
+    digits = digits if len(digits) % 2 == 0 else '0' + digits
+    return bytes.fromhex(digits)
+
+
+def encode(rec, values, car):
+    """Ответ на запись данных: значения машины туда, где их ждёт раскладка, остальное — «ноль»."""
+    params = rec.get('params', [])
+    n = rec.get('len') or max((bit_range(p['bits'], 255)[1] >> 3) + 1 for p in params)
+    buf = bytearray(n)
+    for p in params:
+        if bit_range(p['bits'], n)[1] >> 3 >= n:
+            continue
+        v = values.get(p['key'])
+        v = v(car) if callable(v) else v
+        t = p.get('type', 'uint')
+        if t == 'str':
+            put_bytes(buf, p['bits'], (v or '').encode())
+        elif t == 'bcd':
+            if v:
+                put_bytes(buf, p['bits'], bcd_bytes(v))
+        elif t in ('bytes', 'float'):
+            continue
+        else:
+            factor, offset = p.get('factor', 1), p.get('offset', 0)
+            phys = 0 if v is None else v           # «ноль» в физических единицах
+            s, e = bit_range(p['bits'], n)
+            size = e - s + 1
+            raw = int(round((phys - offset) / factor))
+            lo, hi = (-(1 << (size - 1)), (1 << (size - 1)) - 1) if t == 'sint' else (0, (1 << size) - 1)
+            put(buf, p['bits'], max(lo, min(hi, raw)))   # put() сам переведёт отрицательное в доп. код
+    return bytes(buf)
+
+
+def load_kb():
+    with open(KB_PATH, encoding='utf-8') as f:
+        return json.load(f)
+
+
+def kb_model(kb, node, name):
+    for e in kb['ecus']:
+        if e['node'] == node:
+            for m in e['models']:
+                if m['model'] == name:
+                    return e, m
+    raise KeyError(f'{node}/{name} нет в базе знаний — пересобери её (app/tool/build_kb.py)')
+
+
+# Значения «машины» по названиям параметров PSA-RE (в их единицах)
+ENGINE_VALUES = {
+    'ENGINE_SPEED': lambda c: c.rpm,
+    'SUPPLY_VOLTAGE': lambda c: c.vbat_mv / 1000,
+    'ENGINE_COOLANT_TEMPERATURE': lambda c: c.coolant,
+    'UNCORRECTED_COOLANT_TEMPERATURE': lambda c: c.coolant,
+    'VEHICLE_SPEED': lambda c: c.speed,
+    'INLET_AIR_TEMPERATURE': 24,
+    'UNCORRECTED_AIR_TEMPERATURE': 24,
+    'EXTERIOR_AIR_TEMPERATURE': 14,
+    'MEASURED_THROTTLE_ANGLE': lambda c: c.throttle,
+    'UPSTREAM_OXYGEN_SENSOR_VOLTAGE': lambda c: c.lambda_mv,
+    'INTAKE_AIR_MANIFOLD_PRESSURE': lambda c: 300 + c.throttle * 6,
+    'FUEL_LEVEL_DISPLAYED': 31,
+}
+ABS_VALUES = {'VEHICLE_SPEED': lambda c: c.speed, 'SUPPLY_VOLTAGE': lambda c: c.vbat_mv / 1000,
+              'ENGINE_SPEED': lambda c: c.rpm}
+
+
+class KwpEcu:
+    """Блок на шине B, KWP2000 по-PSA. Модель, адрес и данные — из базы знаний."""
+
+    def __init__(self, kb, node, model, part, dtcs=(), values=None, extra=None):
+        e, m = kb_model(kb, node, model)
+        self.name, self.bus = f'{node} {model}', 'B'
+        self.tx, self.rx = int(e['tx'], 16), int(e['rx'], 16)
+        self.model = m
+        self.open_req = bytes.fromhex(m.get('open') or '81')
+        self.part = part
+        self.dtcs = list(dtcs)                 # [(2 байта кода, байт состояния)]
+        self.values = dict(values or {})
+        self.values.update(extra or {})
+        self.records = {bytes.fromhex(r['req']): r for r in m.get('records', [])}
+        self.last = 0.0                        # когда был последний запрос в сеансе
+
+    def session_ok(self):
+        return time.monotonic() - self.last < KWP_IDLE_S
+
+    def read(self, req, car):
+        rec = self.records.get(bytes(req))
+        ident = self.model.get('ident') or {}
+        is_ident = ident.get('req') and bytes.fromhex(ident['req']) == bytes(req)
+        if rec is None and not is_ident:
+            return None
+        if rec is not None:
+            body = bytearray(encode(rec, self.values, car))
+        else:
+            body = bytearray(24)
+        if is_ident and ident.get('part'):
+            s, e = bit_range(ident['part'], 255)
+            need = (e >> 3) + 1
+            if len(body) < need:
+                body += bytes(need - len(body))
+            put_bytes(body, ident['part'], bcd_bytes(self.part))
+        return bytes(body)
 
     def handle(self, req, sim):
         car = sim.car
         sid = req[0]
-
-        if sid == 0x10:                        # сессия
-            if len(req) < 2:
-                return nrc(sid, 0x13)
-            self.session = req[1] & 0x7F
-            if self.session == 1:
-                self.unlocked = False
-            return bytes([0x50, self.session, 0x00, 0x32, 0x01, 0xF4])
-
-        if sid == 0x3E:                        # "я здесь"
-            return bytes([0x7E, 0x00])
-
-        if sid == 0x22:                        # чтение по DID
-            if len(req) < 3:
-                return nrc(sid, 0x13)
-            val = self.read_did((req[1] << 8) | req[2], car)
-            if val is None:
-                return nrc(sid, 0x31)
-            return bytes([0x62, req[1], req[2]]) + val
-
-        if sid == 0x19:                        # ошибки
-            sub = req[1] if len(req) > 1 else 0x02
-            if sub == 0x04:                    # стоп-кадр по номеру ошибки: 19 04 <DTC> <запись>
-                if len(req) < 5:
-                    return nrc(sid, 0x13)
-                dtc = bytes(req[2:5])
-                found = [s for d, s in self.dtcs if d == dtc]
-                if not found:
-                    return nrc(sid, 0x31)
-                body = bytearray([0x59, 0x04]) + dtc + bytes([found[0]])
-                snap = self.snapshots.get(dtc)
-                if snap:
-                    body += bytes([0x01, len(snap)])
-                    for did, val in snap:
-                        body += u16(did) + val
-                return bytes(body)
-            body = bytearray([0x59, 0x02, 0xFF])
-            for dtc, status in self.dtcs:
-                body += dtc + bytes([status])
-            return bytes(body)
-
-        if sid == 0x14:                        # сброс ошибок; активные (бит 0) остаются
-            self.dtcs = [d for d in self.dtcs if d[1] & 0x01]
-            return bytes([0x54])
-
-        if sid in (0x27, 0x2E, 0x31) and self.session == 1:
-            return nrc(sid, 0x7F)              # не в этой сессии
-
-        if sid == 0x2E:                        # запись по DID
-            if len(req) < 4:
-                return nrc(sid, 0x13)
-            did = (req[1] << 8) | req[2]
-            if did not in self.cfg:
-                return nrc(sid, 0x31)
-            if not self.unlocked:
-                return nrc(sid, 0x33)
-            if car.vbat_mv < 12000:
-                return nrc(sid, 0x22)          # условия не те: низкое напряжение
-            self.cfg[did] = bytearray(req[3:])
-            return bytes([0x6E, req[1], req[2]])
-
-        if sid == 0x31:                        # процедуры
-            if len(req) < 4:
-                return nrc(sid, 0x13)
-            rid = (req[2] << 8) | req[3]
-            res = self.routine(rid, bytes(req[4:]), sim)
-            if res is None:
-                return nrc(sid, 0x31)
-            if isinstance(res, int):
-                return nrc(sid, res)
-            return bytes([0x71, req[1], req[2], req[3]]) + res
-
+        if sid == 0x81 or (sid == 0x10 and len(req) > 1 and req[1] == 0xC0):
+            if bytes(req[:len(self.open_req)]) != self.open_req:
+                return nrc(sid, 0x11)          # этот блок открывается другим запросом
+            self.last = time.monotonic()
+            return bytes([0xC1, 0xD0, 0x8F]) if sid == 0x81 else bytes([0x50, 0xC0])
+        if sid == 0x82 or (sid == 0x10 and len(req) > 1 and req[1] == 0x81):
+            self.last = 0.0
+            return bytes([0xC2]) if sid == 0x82 else bytes([0x50, 0x81])
+        if sid == 0x3E:                        # «я здесь» — отвечает и без сеанса
+            if self.session_ok():
+                self.last = time.monotonic()
+            return bytes([0x7E])
+        if sid in (0x21, 0x17, 0x14, 0x22) and not self.session_ok():
+            return nrc(sid, 0x80)              # без открытого сеанса не отвечает
+        self.last = time.monotonic()
+        if sid in (0x21, 0x22):
+            n = 2 if sid == 0x21 else 3
+            if len(req) < n:
+                return nrc(sid, 0x12)
+            body = self.read(req[:n], car)
+            if body is None:
+                return nrc(sid, 0x31 if sid == 0x21 else 0x11)
+            return bytes([sid + 0x40]) + bytes(req[1:n]) + body
+        if sid == 0x17:
+            out = bytearray([0x57, len(self.dtcs)])
+            for code, st in self.dtcs:
+                out += code + bytes([st])
+            return bytes(out)
+        if sid == 0x14:                        # сброс; те, что есть сейчас (биты 6–5 = 11), вернутся
+            self.dtcs = [d for d in self.dtcs if (d[1] >> 5) & 3 == 3]
+            return bytes([0x54, 0xFF, 0x00])
+        if sid in (0x27, 0x3B, 0x30, 0x31, 0x34, 0x2E):
+            return nrc(sid, 0x33)              # запись и управление — только с доступом, а его нет
         return nrc(sid, 0x11)
 
 
-class Bsi(Ecu):
-    def __init__(self):
-        super().__init__(
-            'BSI', 'B', 0x752, 0x652,
-            dtcs=[(bytes([0xC1, 0x00, 0x00]), 0x08),     # U0100, сохранена
-                  (bytes([0xC1, 0x55, 0x00]), 0x09)],    # U0155, активна
-            dids={0xF190: VIN.encode(),
-                  0xF187: b'9665000000',
-                  0xF195: b'SIM 0.1'},
-            cfg={0x2201: bytearray([1]),       # закрывать двери в движении
-                 0x2202: bytearray([0]),       # дневные ходовые огни
-                 0x2203: bytearray([30]),      # сопровождающий свет, с
-                 0x2204: bytearray([0]),       # открывать только водительскую
-                 0x2205: bytearray([0])})      # звук при закрытии
+class UdsEcu:
+    """Блок, которого нет в базе знаний (на нём проверяется «поиск блоков»). UDS."""
+
+    def __init__(self, name, tx, rx):
+        self.name, self.bus, self.tx, self.rx = name, 'B', tx, rx
+
+    def handle(self, req, sim):
+        sid = req[0]
+        if sid == 0x3E:
+            return bytes([0x7E, 0x00])
+        if sid == 0x22 and bytes(req[1:3]) == b'\xF1\x90':
+            return b'\x62\xF1\x90' + VIN.encode()
+        return nrc(sid, 0x11)
 
 
 class ObdEngine:
@@ -221,7 +305,7 @@ class ObdEngine:
             elif pid == 0x0C:
                 v = u16(car.rpm * 4)
             elif pid == 0x0D:                   # скорость: «едем» во время подгазовки
-                v = bytes([max(0, (car.rpm - 800) // 40)])
+                v = bytes([car.speed])
             elif pid == 0x0F:
                 v = bytes([24 + 40])
             elif pid == 0x11:
@@ -246,7 +330,7 @@ class ObdEngine:
                 return nrc(mode, 0x12)
             return bytes([0x41, pid]) + v
         if mode == 0x02 and len(req) >= 2:  # стоп-кадр: 02 <PID> [кадр 00]
-            ff = {0x02: b'0', 0x04: bytes([52 * 255 // 100]), 0x05: bytes([88 + 40]),
+            ff = {0x02: b'0', 0x04: bytes([52 * 255 // 100]), 0x05: bytes([88 + 40]),
                   0x0C: u16(2140 * 4), 0x0D: bytes([62]), 0x11: bytes([34 * 255 // 100])}
             pid = req[1]
             if pid == 0x00:
@@ -264,38 +348,36 @@ class ObdEngine:
         return nrc(mode, 0x11)
 
 
+ACTIVE, STORED = 0x60, 0x20                    # состояние ошибки KWP: биты 6–5 = 11 / 01
+
+
 class Sim:
     def __init__(self, car):
         self.car = car
+        self.kb = load_kb()
+        self.reset()
+
+    def reset(self):
+        """Как после включения адаптера: шины закрыты, у блоков свои ошибки, сеансы закрыты.
+        Делается при каждом новом подключении — проверки не зависят от прошлых."""
+        kb = self.kb
         obd = ObdEngine()
         self.ecus = {('A', 0x7DF): obd, ('A', 0x7E0): obd}
-        for e in (Bsi(),
-                  Ecu('Двигатель', 'B', 0x6A8, 0x688,
-                      dtcs=[(bytes([0x01, 0x30, 0x00]), 0x09),    # P0130, активна
-                            (bytes([0x03, 0x00, 0x00]), 0x08)],   # P0300, сохранена
-                      dids={0xF190: VIN.encode(),
-                            0x1001: lambda c: u16(c.rpm),
-                            0x1002: lambda c: bytes([int(c.coolant) + 40]),
-                            0x1003: lambda c: bytes([c.throttle]),
-                            0x1004: lambda c: u16(c.lambda_mv),
-                            0x1005: lambda c: u16(c.vbat_mv)}),
-                  Ecu('ABS/ESP', 'B', 0x6AD, 0x68D, dids={0xF190: VIN.encode()}),
-                  Ecu('Подушки', 'B', 0x744, 0x644, dids={0xF190: VIN.encode()}),
-                  Ecu('Щиток', 'B', 0x75F, 0x65F, dids={0xF190: VIN.encode()})):
-            self.ecus[(e.bus, e.tx)] = e
-        snap = lambda rpm, cool, thr, mv, spd: [
-            (0x1001, u16(rpm)), (0x1002, bytes([cool + 40])), (0x1003, bytes([thr])),
-            (0x1005, u16(mv)), (0x1006, bytes([spd]))]
-        eng = self.ecus[('B', 0x6A8)]
-        eng.snapshots = {bytes([0x01, 0x30, 0x00]): snap(2140, 88, 34, 14180, 62),
-                         bytes([0x03, 0x00, 0x00]): snap(3100, 91, 60, 14020, 95)}
-        bsi = self.ecus[('B', 0x752)]
-        bsi.snapshots = {bytes([0xC1, 0x00, 0x00]): [(0x1005, u16(12410)), (0x1006, bytes([0]))],
-                         bytes([0xC1, 0x55, 0x00]): [(0x1005, u16(11930)), (0x1006, bytes([47]))]}
-        # блоки, которых нет в базе знаний — на них проверяется «поиск блоков».
-        # Адреса для симулятора, не сверены с машиной.
-        for e in (Ecu('Климат (sim)', 'B', 0x76D, 0x66D, dids={0xF190: VIN.encode()}),
-                  Ecu('Усилитель руля (sim)', 'B', 0x6B5, 0x5B5, dids={0xF190: VIN.encode()})):
+        # Модели и номера деталей — из вариантов C3 II в базе знаний (A51_…)
+        for e in (
+            KwpEcu(kb, 'BSI', 'BSI', '9659285680',
+                   dtcs=[(b'\xC0\x45', STORED), (b'\xF5\x34', ACTIVE)],   # U0045 — общий SAE, U3534 — код PSA
+                   values={'VIN': VIN, 'SUPPLY_VOLTAGE': lambda c: c.vbat_mv / 1000}),
+            KwpEcu(kb, 'CMM', 'V46', '789168',
+                   dtcs=[(b'\x01\x30', ACTIVE), (b'\x03\x00', STORED)], values=ENGINE_VALUES),
+            KwpEcu(kb, 'ABS', 'ESPMK100', '749567', values=ABS_VALUES),
+            KwpEcu(kb, 'RBG', 'SAC_AUTOLIV', '9665386180'),
+            KwpEcu(kb, 'CMB', 'CLUSTER', '9666453877',
+                   values={'SUPPLY_VOLTAGE': lambda c: c.vbat_mv / 1000}),
+            # блоки, которых нет в базе знаний — на них проверяется «поиск блоков»
+            UdsEcu('чужой 1 (sim)', 0x6B1, 0x691),
+            UdsEcu('чужой 2 (sim)', 0x77A, 0x67A),
+        ):
             self.ecus[(e.bus, e.tx)] = e
         self.buses = {}                        # bus -> listen (bool)
         self.monitors = {}                     # bus -> mode
@@ -381,6 +463,7 @@ class Sim:
 async def handler(ws, sim):
     peer = getattr(ws, 'remote_address', ('?',))[0]
     print(f'[+] подключился {peer}')
+    sim.reset()
 
     async def pump():
         n = 0
@@ -417,6 +500,9 @@ async def main():
 
     sim = Sim(Car(engine_on=not args.engine_off))
     print(f'Симулятор C3 II: ws://{args.host}:{args.port}  (прошивка {FW})')
+    for e in sim.ecus.values():
+        if getattr(e, 'bus', '') == 'B':
+            print(f'  {e.tx:X} -> {e.rx:X}  {e.name}')
     async with websockets.serve(lambda ws: handler(ws, sim), args.host, args.port):
         await asyncio.Future()
 

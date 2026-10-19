@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../kb/knowledge_base.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../main.dart';
+import '../state/app_state.dart';
 import '../state/diag_service.dart';
 import '../theme.dart';
 import 'discovery_screen.dart';
@@ -17,7 +18,8 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
-  final _results = <EcuResult>[];
+  late final AppState _app; // в dispose() к context уже не обратиться
+  List<EcuResult> get _results => _app.scanResults;
   bool _running = false;
   bool _reporting = false;
 
@@ -38,7 +40,19 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   void initState() {
     super.initState();
-    _scan();
+    // с главного экрана: «Автоскан» — опросить заново, «Ошибки»/«Блоков» — показать последний скан
+    _app = AppScope.read(context);
+    if (_app.scanRequested || _app.scanResults.isEmpty) {
+      _app.scanRequested = false;
+      _scan();
+    }
+  }
+
+  @override
+  void dispose() {
+    // ушли со вкладки посреди скана — неполный итог не показываем, в следующий раз опросим заново
+    if (_running) _app.scanResults = [];
+    super.dispose();
   }
 
   Future<void> _scan() async {
@@ -46,7 +60,7 @@ class _ScanScreenState extends State<ScanScreen> {
     final diag = app.diag;
     if (diag == null) return;
     setState(() {
-      _results.clear();
+      app.scanResults = [];
       _running = true;
       _error = null;
     });
@@ -58,8 +72,8 @@ class _ScanScreenState extends State<ScanScreen> {
       final answered = _results.where((r) => r.answered).toList();
       // сначала VIN: по нему гараж выбирает (или заводит) машину, потом пишем ей итог
       if (answered.isNotEmpty) {
-        final id = await diag.identify(answered.first.def);
-        if (id['vin'] != null && id['vin']!.isNotEmpty) app.setVin(id['vin']!);
+        final vin = await diag.carVin(answered);
+        if (vin != null) app.setVin(vin);
       }
       app.setScanResult(
         faults: answered.fold(0, (n, r) => n + r.dtcs.length),
@@ -102,7 +116,14 @@ class _ScanScreenState extends State<ScanScreen> {
                       strokeCap: StrokeCap.round,
                     ),
                   ),
-                  Text('${_results.length}/$total', style: display(context, 16)),
+                  // пока идёт скан — сколько мест проверено; потом — сколько блоков нашлось
+                  if (_running)
+                    Text('${_results.length}/$total', style: display(context, 16))
+                  else
+                    Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text('${answered.length}', style: display(context, 22, w: FontWeight.w700)),
+                      Text(t.ofTotal(total), style: TextStyle(fontSize: 10, height: 1, color: p.textDim)),
+                    ]),
                 ]),
               ),
               const SizedBox(width: 16),
@@ -110,7 +131,8 @@ class _ScanScreenState extends State<ScanScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(_running ? t.scanning : t.scanDone, style: display(context, 18, w: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text(t.scanSummary(answered.length - bad, bad), style: TextStyle(color: p.textDim)),
+                  Text('${t.scanFound(answered.length, total)} · ${t.scanSummary(answered.length - bad, bad)}',
+                      style: TextStyle(color: p.textDim)),
                 ]),
               ),
               IconButton(
@@ -130,7 +152,8 @@ class _ScanScreenState extends State<ScanScreen> {
           if (_error != null)
             Padding(padding: const EdgeInsets.only(top: 16), child: Text(t.error(_error!), style: TextStyle(color: p.bad))),
           const SizedBox(height: 14),
-          for (final r in _results) ...[
+          // необязательные блоки (их может не быть на этой машине) показываем, только если ответили
+          for (final r in _results.where((r) => r.answered || !r.def.optional)) ...[
             _tile(context, r, t),
             const SizedBox(height: 8),
           ],
@@ -183,10 +206,13 @@ class _ScanScreenState extends State<ScanScreen> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(r.def.nameFor(lang), style: TextStyle(fontWeight: FontWeight.w600, color: p.text)),
-            Text('${r.def.tx.toRadixString(16).toUpperCase()} → ${r.def.rx.toRadixString(16).toUpperCase()}',
+            Text(
+                '${r.def.tx.toRadixString(16).toUpperCase()} → ${r.def.rx.toRadixString(16).toUpperCase()}'
+                '${r.model != null ? ' · ${r.model!.name}' : ''}',
                 style: mono(context, 12, color: p.textDim)),
           ]),
         ),
+        const SizedBox(width: 8),
         trailing,
       ]),
     );
@@ -195,7 +221,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
 /// Значок и цвет блока по его типу из базы знаний (поле "icon").
 (IconData, Color) ecuLook(EcuDef e) {
-  switch (e.m['icon']) {
+  switch (e.icon) {
     case 'bsi':
       return (Icons.memory, const Color(0xFF8B5CF6));
     case 'engine':
@@ -210,6 +236,16 @@ class _ScanScreenState extends State<ScanScreen> {
       return (Icons.ac_unit, const Color(0xFF38BDF8));
     case 'steering':
       return (Icons.trip_origin, const Color(0xFF94A3B8));
+    case 'gearbox':
+      return (Icons.alt_route, const Color(0xFFF97316));
+    case 'radio':
+      return (Icons.radio, const Color(0xFFEC4899));
+    case 'parking':
+      return (Icons.sensors, const Color(0xFF14B8A6));
+    case 'alarm':
+      return (Icons.shield_outlined, const Color(0xFFEF4444));
+    case 'power':
+      return (Icons.battery_charging_full, const Color(0xFF84CC16));
     default:
       return (Icons.developer_board, const Color(0xFF94A3B8));
   }

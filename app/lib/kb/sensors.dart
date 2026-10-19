@@ -43,3 +43,10 @@ Sensor sensorById(String id) =>
 
 /// Что стоит на экране по умолчанию: большой сверху + четыре маленьких.
 const defaultGaugeSlots = ['rpm', 'speed', 'coolant', 'battery', 'load'];
+
+/// Графики: главный (несколько линий) и одиночные под ним.
+const defaultGraphMain = ['rpm', 'speed'];
+const defaultGraphSlots = ['rpm', 'speed', 'coolant', 'battery', 'load', 'throttle', 'intake', 'map', 'maf', 'timing'];
+
+/// Цифры: весь каталог по порядку, дальше по кругу.
+final defaultNumSlots = [for (var i = 0; i < 30; i++) sensorCatalog[i % sensorCatalog.length].id];

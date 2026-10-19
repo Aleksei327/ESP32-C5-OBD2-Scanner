@@ -219,6 +219,45 @@ class Sparkline extends CustomPainter {
   bool shouldRepaint(Sparkline old) => true;
 }
 
+/// Несколько линий на одном графике (главный график «Датчиков»). У каждой своя шкала
+/// (min..max её датчика): обороты и температура в одних единицах не сравнить.
+class MultiSparkline extends CustomPainter {
+  MultiSparkline(this.series, this.grid);
+  final List<(List<double>, double, double, Color)> series;
+  final Color grid;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gp = Paint()..color = grid..strokeWidth = 1;
+    for (var i = 0; i <= 4; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gp);
+    }
+    const maxPoints = 150;
+    final dx = size.width / (maxPoints - 1);
+    for (final (points, min, max, color) in series) {
+      final pts = points.where((v) => !v.isNaN).toList();
+      if (pts.length < 2) continue;
+      final x0 = size.width - dx * (pts.length - 1);
+      double y(double v) => size.height - ((v - min) / (max - min)).clamp(0.0, 1.0) * size.height;
+      final line = Path()..moveTo(x0, y(pts.first));
+      for (var i = 1; i < pts.length; i++) {
+        line.lineTo(x0 + dx * i, y(pts[i]));
+      }
+      canvas.drawPath(
+          line,
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.4
+            ..strokeJoin = StrokeJoin.round);
+    }
+  }
+
+  @override
+  bool shouldRepaint(MultiSparkline old) => true;
+}
+
 class NavItem {
   const NavItem(this.icon, this.label, this.color);
   final IconData icon;

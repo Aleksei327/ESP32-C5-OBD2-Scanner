@@ -29,6 +29,9 @@
 
 ## Сторонние материалы
 
+- База знаний приложения `app/assets/kb/c3_ii.json` собрана из данных проекта [PSA-RE](https://github.com/prototux/PSA-RE) и остаётся под его лицензией Apache-2.0 (текст — `app/assets/kb/PSA-RE-LICENCE.txt`; изменения: выбраны данные для C3 II, переложены в другой формат, добавлены русские тексты).
+- Тексты ошибок `app/assets/kb/c3_ii_dtc_gpl.json` взяты из проекта [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) и распространяются под GPL-3.0 (текст — `app/assets/kb/GPL-3.0.txt`; изменения: выбраны коды для блоков C3 II, которых нет в PSA-RE, переложены в другой формат, добавлены русские тексты). Это отдельный файл данных: приложение читает его при запуске и работает и без него.
+- Общие тексты кодов SAE J2012 в `app/assets/kb/c3_ii.json` (раздел `dtc_generic`): Code data from OBD Codes List, https://obdcodeslist.com/code-data.html (через [tekseport/obd2-codes](https://github.com/tekseport/obd2-codes); использование, в том числе коммерческое, разрешено с этой ссылкой). Русские тексты добавлены нами.
 - Шрифты Exo 2 и IBM Plex в `app/assets/google_fonts/` — под SIL Open Font License 1.1, тексты лицензий лежат рядом.
 - Посадочные места и 3D-модели из стандартных библиотек KiCad — под их лицензией (CC BY-SA 4.0 с исключением для плат).
 - Сведения о протоколах и адресах блоков PSA взяты из открытых источников, ссылки приведены в документации; список — в разделе «Благодарности и сторонние проекты» в [README.ru.md](README.ru.md).
@@ -69,6 +72,9 @@ If the future adapter firmware includes code from open-source projects licensed 
 
 ## Third-party material
 
+- The app's knowledge base `app/assets/kb/c3_ii.json` is built from data of the [PSA-RE](https://github.com/prototux/PSA-RE) project and stays under its Apache-2.0 license (text in `app/assets/kb/PSA-RE-LICENCE.txt`; changes: the C3 II data was selected, converted to another format, and Russian texts were added).
+- The fault-code texts in `app/assets/kb/c3_ii_dtc_gpl.json` come from the [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag) project and are distributed under GPL-3.0 (text in `app/assets/kb/GPL-3.0.txt`; changes: the codes for C3 II ECUs missing from PSA-RE were selected, converted to another format, and Russian texts were added). It is a separate data file: the app reads it at start-up and also works without it.
+- Generic SAE J2012 code texts in `app/assets/kb/c3_ii.json` (the `dtc_generic` section): Code data from OBD Codes List, https://obdcodeslist.com/code-data.html (via [tekseport/obd2-codes](https://github.com/tekseport/obd2-codes); use, including commercial use, is allowed with this attribution). Russian texts were added by us.
 - The Exo 2 and IBM Plex fonts in `app/assets/google_fonts/` are under the SIL Open Font License 1.1; the license texts are included next to them.
 - Footprints and 3D models from the standard KiCad libraries are under their own license (CC BY-SA 4.0 with an exception for boards).
 - Information about PSA protocols and ECU addresses comes from public sources linked in the documentation; see "Credits and third-party work" in [README.md](README.md).

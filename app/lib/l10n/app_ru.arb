@@ -69,6 +69,7 @@
   "faultStored": "сохранена",
   "noFaults": "Ошибок нет",
   "unknownFault": "Нет описания в базе",
+  "genericSae": "общее описание SAE",
   "gauges": "Датчики",
   "gaugesSub": "Двигатель · в реальном времени",
   "rpm": "Обороты",
@@ -178,5 +179,45 @@
   },
   "recordLog": "Записать лог в CSV",
   "stopLog": "Остановить и сохранить",
-  "record": "Запись"
+  "record": "Запись",
+  "model": "Модель",
+  "modelUnknown": "не опознана",
+  "chooseModel": "Выбрать модель",
+  "chooseModelHint": "Номера детали нет в базе. Выбери модель блока — тогда расшифруются его данные.",
+  "protocol": "Протокол",
+  "softwareVariant": "Вариант ПО",
+  "noData": "Для этой модели блока в базе нет таких данных",
+  "readFailed": "Блок не отдал эти данные",
+  "knowledgeBase": "База знаний",
+  "licenses": "Лицензии",
+  "numbers": "Цифры",
+  "graphsBelow": "Сколько графиков под главным",
+  "pickSensorsMain": "Главный график: до {n} датчиков",
+  "@pickSensorsMain": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "done": "Готово",
+  "ofTotal": "из {n}",
+  "@ofTotal": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "scanFound": "ответили {n} из {total}",
+  "@scanFound": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }
