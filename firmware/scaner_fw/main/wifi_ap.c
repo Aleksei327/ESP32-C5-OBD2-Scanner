@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "bootloader_random.h"
+#include "dhcpserver/dhcpserver.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -99,7 +100,14 @@ esp_err_t wifi_ap_start(void)
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();
+    // Шлюз и DNS телефону не предлагаем: в интернет через адаптер не выйти, и пусть Android
+    // оставит интернет на мобильных данных, а сеть адаптера считает локальной
+    esp_netif_t *ap = esp_netif_create_default_wifi_ap();
+    dhcps_offer_t off = 0;
+    esp_netif_dhcps_stop(ap);
+    esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_ROUTER_SOLICITATION_ADDRESS, &off, sizeof(off));
+    esp_netif_dhcps_option(ap, ESP_NETIF_OP_SET, ESP_NETIF_DOMAIN_NAME_SERVER, &off, sizeof(off));
+    esp_netif_dhcps_start(ap);
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, NULL));
