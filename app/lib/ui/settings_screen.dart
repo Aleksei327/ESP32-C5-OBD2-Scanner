@@ -56,6 +56,9 @@ class SettingsScreen extends StatelessWidget {
               label: Text(t.licenses),
             ),
           ),
+          const SizedBox(height: 12),
+          _label(context, t.remoteHelper),
+          const _RemoteCard(),
           const SizedBox(height: 16),
           Row(children: [
             Icon(Icons.public, size: 20, color: p.info),
@@ -153,4 +156,64 @@ class SettingsScreen extends StatelessWidget {
           Flexible(child: Text(v, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.p.textDim))),
         ]),
       );
+}
+
+/// Удалённый помощник: адрес посредника с ключом, кнопка и состояние моста.
+class _RemoteCard extends StatefulWidget {
+  const _RemoteCard();
+  @override
+  State<_RemoteCard> createState() => _RemoteCardState();
+}
+
+class _RemoteCardState extends State<_RemoteCard> {
+  late final TextEditingController _url = TextEditingController(text: AppScope.read(context).remoteUrl);
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final t = AppLocalizations.of(context);
+    final p = context.p;
+    final (status, color) = switch (app.remoteState) {
+      'on' => (t.remoteOn(app.remoteUp, app.remoteDown), p.good),
+      'connecting' => (t.remoteConnecting, p.info),
+      'error' => (t.remoteError(app.remoteMsg ?? ''), p.bad),
+      _ => (t.remoteOff, p.textDim),
+    };
+    return GlowCard(
+      tint: app.remoteOn ? p.good : p.textDim,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(t.remoteHelperHint, style: TextStyle(fontSize: 13, color: p.textDim)),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _url,
+          enabled: !app.remoteOn,
+          onChanged: (_) => setState(() {}),
+          maxLines: 2,
+          minLines: 1,
+          style: const TextStyle(fontSize: 13),
+          decoration: InputDecoration(labelText: t.remoteAddress, border: const OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        Text(status, style: TextStyle(fontSize: 13, color: color)),
+        const SizedBox(height: 10),
+        app.remoteOn
+            ? OutlinedButton.icon(
+                onPressed: app.stopRemote,
+                icon: const Icon(Icons.stop_circle_outlined),
+                label: Text(t.remoteStop),
+              )
+            : FilledButton.icon(
+                onPressed: _url.text.trim().isEmpty ? null : () => app.startRemote(_url.text),
+                icon: const Icon(Icons.support_agent),
+                label: Text(t.remoteStart),
+              ),
+      ]),
+    );
+  }
 }

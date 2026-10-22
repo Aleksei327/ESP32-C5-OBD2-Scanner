@@ -115,7 +115,13 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       // Строим только открытую вкладку: каждая сама открывает нужную ей шину,
       // и они не должны работать одновременно (скан и монитор делят шину B).
-      body: pages[_tab],
+      body: AppScope.of(context).remoteOn
+          ? Column(children: [
+              const _RemoteBanner(),
+              // отступ под строку состояния уже занят полоской
+              Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: pages[_tab])),
+            ])
+          : pages[_tab],
       bottomNavigationBar: GlowNavBar(
         index: _tab,
         onTap: (i) => _app.tab.value = i,
@@ -125,6 +131,40 @@ class _HomeShellState extends State<HomeShell> {
           NavItem(Icons.speed_rounded, t.navGauges, const Color(0xFFF59E0B)),
           NavItem(Icons.lan_rounded, t.navBus, const Color(0xFF06B6D4)),
         ],
+      ),
+    );
+  }
+}
+
+/// Полоска сверху, пока работает удалённый помощник: видно и выключается из любой вкладки.
+class _RemoteBanner extends StatelessWidget {
+  const _RemoteBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final t = AppLocalizations.of(context);
+    final on = app.remoteState == 'on';
+    return Material(
+      color: on ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 4, 6),
+          child: Row(children: [
+            const Icon(Icons.support_agent, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(on ? '${t.remoteBanner} · ↑${app.remoteUp} ↓${app.remoteDown}' : t.remoteConnecting,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            ),
+            IconButton(
+              tooltip: t.remoteStop,
+              onPressed: app.stopRemote,
+              icon: const Icon(Icons.close, color: Colors.white),
+            ),
+          ]),
+        ),
       ),
     );
   }

@@ -153,5 +153,32 @@
         "type": "int"
       }
     }
+  },
+  "remoteHelper": "Remote assistant",
+  "remoteHelperHint": "An assistant on a computer reads the car through this phone: the adapter over Wi-Fi, the computer over mobile internet. The assistant gives you the address with its key. Nothing is written to the ECUs.",
+  "remoteAddress": "Assistant address (wss://…)",
+  "remoteStart": "Start",
+  "remoteStop": "Stop",
+  "remoteConnecting": "Connecting…",
+  "remoteOff": "Off",
+  "remoteOn": "Connected · to computer {up}, to adapter {down}",
+  "remoteError": "Error: {msg}",
+  "remoteBanner": "Remote assistant connected",
+  "@remoteOn": {
+    "placeholders": {
+      "up": {
+        "type": "int"
+      },
+      "down": {
+        "type": "int"
+      }
+    }
+  },
+  "@remoteError": {
+    "placeholders": {
+      "msg": {
+        "type": "String"
+      }
+    }
   }
 }

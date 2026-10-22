@@ -44,3 +44,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Удалённый помощник: два WebSocket через разные сети (Wi-Fi адаптера и мобильный интернет)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+}

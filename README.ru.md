@@ -26,9 +26,10 @@
 | Папка | Что там |
 | --- | --- |
 | [`hardware/scaner_v1/`](hardware/scaner_v1/README.ru.md) | проект KiCad 10: схема, плата, посадочные места, 3D-модели и скрипты на Python, которые генерируют и разводят плату; PDF в `build/` |
-| [`firmware/scaner_fw/`](firmware/scaner_fw/README.ru.md) | прошивка самотеста платы на ESP-IDF 6.1 (оба канала CAN, «только слушать», напряжение АКБ) |
+| [`firmware/scaner_fw/`](firmware/scaner_fw/README.ru.md) | прошивка адаптера на ESP-IDF 6.1: точка Wi-Fi и сервер WebSocket для приложения, оба канала CAN, напряжение АКБ |
 | [`app/`](app/README.ru.md) | приложение на Flutter |
 | [`sim/`](sim/README.ru.md) | симулятор адаптера с подключённой C3 на Python — писать приложение без железа и без машины |
+| [`remote/`](remote/README.ru.md) | удалённый помощник: компьютер дома работает с адаптером у машины через телефон и туннель Cloudflare |
 | [`DOCS/`](DOCS/) | документация на русском ([`DOCS/en/`](DOCS/en/) — на английском) |
 
 ## Документация

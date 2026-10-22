@@ -26,9 +26,10 @@ A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, togethe
 | Folder | Contents |
 | --- | --- |
 | [`hardware/scaner_v1/`](hardware/scaner_v1/README.md) | KiCad 10 project: schematic, PCB, footprints, 3D models, and the Python scripts that generate and route the board; PDF exports in `build/` |
-| [`firmware/scaner_fw/`](firmware/scaner_fw/README.md) | ESP-IDF 6.1 board self-test firmware (both CAN channels, listen-only, battery voltage) |
+| [`firmware/scaner_fw/`](firmware/scaner_fw/README.md) | ESP-IDF 6.1 adapter firmware: Wi-Fi access point and WebSocket server for the app, both CAN channels, battery voltage |
 | [`app/`](app/README.md) | Flutter app |
 | [`sim/`](sim/README.md) | Python simulator of the adapter with a C3 attached, to develop the app without hardware or a car |
+| [`remote/`](remote/README.md) | remote assistant: a computer at home works with the adapter at the car through the phone and a Cloudflare tunnel |
 | [`DOCS/en/`](DOCS/en/) | documentation in English ([`DOCS/`](DOCS/) — Russian originals) |
 
 ## Documentation

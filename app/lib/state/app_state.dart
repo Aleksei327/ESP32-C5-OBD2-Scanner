@@ -7,6 +7,7 @@ import '../kb/knowledge_base.dart';
 import '../kb/sensors.dart';
 import '../theme.dart';
 import '../transport/adapter_client.dart';
+import '../transport/net.dart';
 import 'diag_service.dart';
 import 'garage.dart';
 
@@ -17,6 +18,7 @@ class AppState extends ChangeNotifier {
     locale = Locale(_prefs.getString('lang') ?? 'ru');
     theme = AppThemeKind.values[_prefs.getInt('theme') ?? AppThemeKind.bright.index];
     adapterUrl = _prefs.getString('url') ?? 'ws://192.168.4.1:81/ws';
+    remoteUrl = _prefs.getString('remote') ?? '';
     final slots = _prefs.getStringList('gauges');
     if (slots != null && slots.length == defaultGaugeSlots.length) gaugeSlots = slots;
     gaugeMode = (_prefs.getInt('gaugeMode') ?? 0).clamp(0, 2);
@@ -205,9 +207,56 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---- удалённый помощник (transport/net.dart) ----
+
+  String remoteUrl = '';
+  String remoteState = 'off'; // connecting / on / off / error
+  String? remoteMsg;
+  int remoteUp = 0, remoteDown = 0;
+  StreamSubscription? _remoteSub;
+
+  bool get remoteOn => remoteState == 'on' || remoteState == 'connecting';
+
+  Future<void> startRemote(String url) async {
+    var u = url.trim();
+    if (u.startsWith('https://')) u = 'wss://${u.substring(8)}';
+    if (u.startsWith('http://')) u = 'ws://${u.substring(7)}';
+    remoteUrl = u;
+    _prefs.setString('remote', u);
+    _remoteSub ??= Net.remoteStatus().listen(_onRemote);
+    remoteState = 'connecting';
+    remoteMsg = null;
+    remoteUp = remoteDown = 0;
+    notifyListeners();
+    try {
+      await Net.remoteStart(adapterUrl, u);
+    } catch (e) {
+      remoteState = 'error';
+      remoteMsg = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> stopRemote() async {
+    try {
+      await Net.remoteStop();
+    } catch (_) {}
+    remoteState = 'off';
+    notifyListeners();
+  }
+
+  void _onRemote(Map<String, dynamic> m) {
+    remoteState = m['state'] as String? ?? 'off';
+    remoteMsg = m['msg'] as String?;
+    remoteUp = (m['up'] as num?)?.toInt() ?? remoteUp;
+    remoteDown = (m['down'] as num?)?.toInt() ?? remoteDown;
+    notifyListeners();
+  }
+
   String get batteryText => (batteryMv / 1000).toStringAsFixed(1).replaceAll('.', ',');
 
   Future<void> disconnect() async {
+    if (remoteOn) await stopRemote();
     await _evSub?.cancel();
     _evSub = null;
     await client.close();
@@ -217,6 +266,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _evSub?.cancel();
+    _remoteSub?.cancel();
     client.close();
     super.dispose();
   }

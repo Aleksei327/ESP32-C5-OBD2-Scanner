@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'net.dart';
+
 /// Клиент «тупого» адаптера по протоколу DOCS/ПРОТОКОЛ.md.
 ///
 /// Отправляет команды с нарастающим id и ждёт ответ с тем же id.
@@ -22,7 +24,9 @@ class AdapterClient {
   Future<Map<String, dynamic>> connect(String url,
       {Duration timeout = const Duration(seconds: 6)}) async {
     await close();
-    final ch = WebSocketChannel.connect(Uri.parse(url));
+    final uri = Uri.parse(url);
+    await Net.bindForHost(uri.host);  // к адаптеру — через его Wi-Fi, а не мобильный интернет
+    final ch = WebSocketChannel.connect(uri);
     await ch.ready.timeout(timeout);
     _ch = ch;
     _sub = ch.stream.listen(_onMessage, onError: _onDown, onDone: _onDown);

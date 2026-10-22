@@ -219,5 +219,32 @@
         "type": "int"
       }
     }
+  },
+  "remoteHelper": "Удалённый помощник",
+  "remoteHelperHint": "Помощник на компьютере опрашивает машину через этот телефон: к адаптеру — по Wi-Fi, к компьютеру — через мобильный интернет. Адрес с ключом даёт помощник. В блоки ничего не пишется.",
+  "remoteAddress": "Адрес помощника (wss://…)",
+  "remoteStart": "Включить",
+  "remoteStop": "Выключить",
+  "remoteConnecting": "Подключаюсь…",
+  "remoteOff": "Выключен",
+  "remoteOn": "Подключён · к компьютеру {up}, к адаптеру {down}",
+  "remoteError": "Ошибка: {msg}",
+  "remoteBanner": "Удалённый помощник подключён",
+  "@remoteOn": {
+    "placeholders": {
+      "up": {
+        "type": "int"
+      },
+      "down": {
+        "type": "int"
+      }
+    }
+  },
+  "@remoteError": {
+    "placeholders": {
+      "msg": {
+        "type": "String"
+      }
+    }
   }
 }
