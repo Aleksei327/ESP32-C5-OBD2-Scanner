@@ -10,7 +10,7 @@ That way the firmware does not change for every car, and a new car is a new JSON
 
 ## Transport
 
-- Wi-Fi: the adapter runs the access point `SCANER-C5`, address `ws://192.168.4.1:81/ws`.
+- Wi-Fi: the adapter runs the access point `SCANER-C5-XXXX` (XXXX is the end of its MAC address) with a WPA2 password, address `ws://192.168.4.1:81/ws`. The password is random, created on first power-up and stored in the adapter; the `wifi` console command over USB shows and changes it.
 - Simulator on a PC: `ws://<PC IP>:8765` (see [`sim/README.md`](../../sim/README.md)).
 - BLE later — same JSON messages.
 
@@ -41,6 +41,15 @@ Bytes are always hex strings without spaces (`"22F190"`), CAN IDs are hex string
 
 The ECU's answer is returned as is, including negative responses (`7F 22 31` etc.). The app decodes it.
 
+The adapter runs the commands for one bus one after another, in the order they arrive; buses A and B work independently.
+
+### ISO-TP frames
+
+- Bus A (OBD-II): frames are padded to 8 bytes with zeros, as ISO 15765-4 requires. The adapter's flow control is `30 00 00`.
+- Bus B (PSA): a frame is as long as its data, no padding — that is how PSA diagnostic tools send them. Flow control is `30 00 05` (5 ms between frames, as in ludwig-v/arduino-psa-diag).
+- `isotp.req` takes `pad: true/false` to change this for one request.
+- `rx: "*"`: the answer is the first frame with an ID in 600–7FF that starts with `sid + 40` or `7F sid`. After it the adapter listens to that ID only.
+
 ### Errors
 
 | `err` | Meaning |
@@ -50,7 +59,7 @@ The ECU's answer is returned as is, including negative responses (`7F 22 31` etc
 | `listen_only` | The bus is open in listen-only mode, transmitting is not allowed |
 | `timeout` | The ECU did not answer |
 | `bus_off` | Bus error (short circuit, missing terminator, wrong bitrate) |
-| `busy` | The adapter is busy with another request on this bus |
+| `busy` | The command queue of this bus is full (more than 16 waiting) |
 
 ## Events (no `id`)
 
@@ -70,6 +79,7 @@ The ECU's answer is returned as is, including negative responses (`7F 22 31` etc
 - After power-up both buses are closed and the transceivers are in listen-only mode (Rs = 1).
 - Transmitting is only possible after `bus.open` with `listen: false`. The app does this only when the user starts diagnostics.
 - The app is read-only for now: ECUs, fault codes (and clearing them), live data, bus monitor. Nothing is written to the ECUs.
+- When the app disconnects (the connection closes or the phone leaves the Wi-Fi network), the adapter stops tester present and the monitor and closes both buses.
 
 ## On top of it (in the app)
 

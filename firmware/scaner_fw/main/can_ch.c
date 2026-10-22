@@ -6,6 +6,7 @@
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "esp_twai_onchip.h"
+#include "esp_private/esp_gpio_reserve.h"
 
 static const char *TAG = "can";
 
@@ -41,6 +42,14 @@ static bool IRAM_ATTR on_error(twai_node_handle_t handle, const twai_error_event
     return false;
 }
 
+static bool IRAM_ATTR on_state(twai_node_handle_t handle, const twai_state_change_event_data_t *edata, void *user_ctx)
+{
+    if (edata->new_sta == TWAI_ERROR_BUS_OFF) {
+        ((can_ch_t *)user_ctx)->bus_off = true;
+    }
+    return false;
+}
+
 // TX трансивера держим в 1 («тишина»), пока им не управляет контроллер CAN:
 // подтяжки на D на плате нет, защита — Rs = 1 (передатчик выключен) плюс этот уровень.
 static void tx_idle(can_ch_t *ch)
@@ -69,13 +78,18 @@ void can_ch_init_pins(can_ch_t *ch)
     }
 }
 
-esp_err_t can_ch_start(can_ch_t *ch, bool listen_only)
+esp_err_t can_ch_start(can_ch_t *ch, bool listen_only, int bitrate)
 {
     if (ch->node) {
         can_ch_stop(ch);
     }
     // Трансивер в «только слушать» (Rs = 1), пока контроллер не запущен и не держит на TX «тишину»
     gpio_set_level(ch->rs, 1);
+    if (!listen_only) {
+        // TX держали в 1 через gpio_config, а он помечает вывод занятым — отдаём его контроллеру,
+        // уровень на выводе при этом не меняется
+        esp_gpio_revoke(BIT64(ch->tx));
+    }
 
     twai_onchip_node_config_t cfg = {
         .io_cfg = {
@@ -84,7 +98,7 @@ esp_err_t can_ch_start(can_ch_t *ch, bool listen_only)
             .quanta_clk_out = GPIO_NUM_NC,
             .bus_off_indicator = GPIO_NUM_NC,
         },
-        .bit_timing.bitrate = CAN_BITRATE,
+        .bit_timing.bitrate = bitrate > 0 ? bitrate : CAN_BITRATE,
         .timestamp_resolution_hz = 1000000,
         .tx_queue_depth = 8,
         .flags.enable_listen_only = listen_only,
@@ -99,6 +113,7 @@ esp_err_t can_ch_start(can_ch_t *ch, bool listen_only)
     twai_event_callbacks_t cbs = {
         .on_rx_done = on_rx,
         .on_error = on_error,
+        .on_state_change = on_state,
     };
     ESP_ERROR_CHECK(twai_node_register_event_callbacks(ch->node, &cbs, ch));
     ESP_ERROR_CHECK(twai_node_enable(ch->node));
@@ -106,8 +121,10 @@ esp_err_t can_ch_start(can_ch_t *ch, bool listen_only)
         gpio_set_level(ch->rs, 0);  // контроллер уже держит TX в 1 — теперь можно включать передатчик
     }
     ch->listen_only = listen_only;
+    ch->bitrate = cfg.bit_timing.bitrate;
+    ch->bus_off = false;
     xQueueReset(ch->rxq);
-    ESP_LOGI(TAG, "%s: %s, %d бит/с", ch->name, listen_only ? "только слушать" : "работа", CAN_BITRATE);
+    ESP_LOGI(TAG, "%s: %s, %d бит/с", ch->name, listen_only ? "только слушать" : "работа", ch->bitrate);
     return ESP_OK;
 }
 
@@ -117,10 +134,19 @@ esp_err_t can_ch_stop(can_ch_t *ch)
     if (ch->node == NULL) {
         return ESP_OK;
     }
-    twai_node_disable(ch->node);
+    // После bus-off драйвер уже остановил узел сам (то же состояние BUS_OFF) — второй раз не выключаем
+    twai_node_status_t st = {0};
+    twai_node_get_info(ch->node, &st, NULL);
+    if (st.state != TWAI_ERROR_BUS_OFF) {
+        twai_node_disable(ch->node);
+    }
     esp_err_t err = twai_node_delete(ch->node);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "%s: twai_node_delete: %s", ch->name, esp_err_to_name(err));
+    }
     ch->node = NULL;
     tx_idle(ch);  // вывод отпущен контроллером — снова держим «тишину» сами
+    ESP_LOGI(TAG, "%s: выключен", ch->name);
     return err;
 }
 
@@ -160,8 +186,8 @@ void can_ch_print_status(can_ch_t *ch)
     twai_node_status_t s = {0};
     twai_node_record_t r = {0};
     twai_node_get_info(ch->node, &s, &r);
-    printf("%s: %s, %s, TEC=%u REC=%u, принято %lu, потеряно %lu, ошибок шины %lu\n",
-           ch->name, ch->listen_only ? "только слушать" : "работа",
+    printf("%s: %s, %d бит/с, %s, TEC=%u REC=%u, принято %lu, потеряно %lu, ошибок шины %lu\n",
+           ch->name, ch->listen_only ? "только слушать" : "работа", ch->bitrate,
            s.state < 4 ? st[s.state] : "?", s.tx_error_count, s.rx_error_count,
            (unsigned long)ch->rx_count, (unsigned long)ch->rx_dropped, (unsigned long)r.bus_err_num);
 }

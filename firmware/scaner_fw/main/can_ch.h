@@ -24,6 +24,8 @@ typedef struct {
     twai_node_handle_t node;
     QueueHandle_t rxq;
     bool listen_only;
+    int bitrate;
+    volatile bool bus_off;                  // контроллер ушёл в bus-off (флаг сбрасывает тот, кто его прочёл)
     volatile uint32_t rx_count, rx_dropped, bus_errors;
 } can_ch_t;
 
@@ -31,8 +33,9 @@ typedef struct {
 void can_ch_init_pins(can_ch_t *ch);
 
 // listen_only = true: Rs = 1 (передатчик трансивера выключен) и TWAI в режиме listen-only
-esp_err_t can_ch_start(can_ch_t *ch, bool listen_only);
+esp_err_t can_ch_start(can_ch_t *ch, bool listen_only, int bitrate);
 esp_err_t can_ch_stop(can_ch_t *ch);
+static inline bool can_ch_is_open(const can_ch_t *ch) { return ch->node != NULL; }
 
 esp_err_t can_ch_send(can_ch_t *ch, uint32_t id, const uint8_t *data, uint8_t len, int timeout_ms);
 bool can_ch_recv(can_ch_t *ch, can_msg_t *msg, int timeout_ms);
