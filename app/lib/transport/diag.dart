@@ -31,6 +31,10 @@ class Dtc {
 
   /// Код с типом неисправности (UDS): «B1003-00». По нему ищется текст в базе.
   String get key => raw.length >= 3 ? '$code-${raw[2].toRadixString(16).padLeft(2, '0').toUpperCase()}' : code;
+
+  /// Код, как его пишет PSA (KWP, 2 байта): «A4C0» — тип неисправности A, номер 4C0.
+  String? get psa =>
+      raw.length == 2 ? raw.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase() : null;
 }
 
 abstract class DiagProtocol {

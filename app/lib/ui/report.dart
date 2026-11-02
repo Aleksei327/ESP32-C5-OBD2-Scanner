@@ -121,6 +121,10 @@ class ScanReport {
                             final i => i.generic ? '${i.text} (${t.genericSae})' : i.text,
                           },
                           style: const pw.TextStyle(fontSize: 10)),
+                      if (app.diag?.dtcInfo(r.def, d, lang)?.check case final c?)
+                        pw.Text(t.faultCheck(c), style: pw.TextStyle(fontSize: 8.5, color: dim)),
+                      if (!r.def.saeP && d.psa != null)
+                        pw.Text('PSA ${d.psa}', style: pw.TextStyle(font: mono, fontSize: 8.5, color: dim)),
                       if (snaps['${r.def.tx}:${d.code}']?.isNotEmpty ?? false)
                         pw.Text('${t.freezeFrame}: ${snaps['${r.def.tx}:${d.code}']!.join(' · ')}',
                             style: pw.TextStyle(fontSize: 8.5, color: dim)),

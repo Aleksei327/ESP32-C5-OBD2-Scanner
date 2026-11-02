@@ -43,3 +43,6 @@ remote/.session.json
 
 # Опросы машины (remote/scan.py): VIN и номера деталей — только локально
 scans/
+
+# Коды PSA из заводского документа («ne peut être reproduit») — только локально, см. app/tool/build_psa_codes.py
+app/assets/kb/psa_codes.json

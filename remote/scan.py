@@ -331,13 +331,50 @@ class Ecu:
         return out, None
 
 
-def dtc_text(model, extra, generic, d):
+def sae_p(ecu):
+    """Блок пишет P-коды SAE (двигатель, коробка), а не коды PSA «тип + номер»."""
+    return any(str(k).startswith('P') for m in ecu['models'] for k in (m.get('dtc') or {}))
+
+
+def psa_text(psa, d, saep):
+    """Текст по списку кодов PSA (app/assets/kb/psa_codes.json, только локально)."""
+    codes = psa.get('codes') or {}
+    raw = d['raw']
+    if len(raw) != 4:
+        return None
+    if saep:
+        e, t = codes.get(d['code']), None
+    elif raw[0] == '0':
+        e, t = codes.get(raw[1:]), None
+    elif raw[0] in '789ABCDEF':
+        e, t = codes.get(raw) or codes.get(raw[1:]), raw[0]
+    else:
+        return None
+    if not e:
+        n = int(raw[1:], 16)
+        for s in [] if saep else psa.get('sections') or []:
+            if int(s['lo'], 16) <= n <= int(s['hi'], 16):
+                text = psa['unknown']['ru'].replace('{s}', s['ru']).replace('{n}', raw[1:])
+                return text + (f" ({psa['types'][t]['ru']})" if t else '') + ' [список PSA]'
+        return None
+    text = e.get('ru') or e['fr']
+    if t and not e.get('typed'):
+        text += f" ({psa['types'][t]['ru']})"
+    if e.get('check'):
+        text += f"; проверить: {e.get('check_ru') or e['check']}"
+    return text + ' [список PSA]'
+
+
+def dtc_text(model, extra, generic, d, psa=None, saep=False):
     for key in (d.get('key'), d['code']):
         if not key or model is None:
             continue
         for src in (model.get('dtc') or {}, extra.get(model['model'], {})):
             if key in src:
                 return txt(src[key])
+    t = psa_text(psa or {}, d, saep)
+    if t:
+        return t
     if is_sae(d['code']) and d['code'] in generic:
         return txt(generic[d['code']]) + ' (общее описание SAE)'
     return None
@@ -454,6 +491,10 @@ async def scan(args):
     except OSError:
         extra = {}
     generic = kb.get('dtc_generic', {})
+    try:
+        psa = json.load(open(os.path.join(KB_DIR, 'psa_codes.json'), encoding='utf-8'))
+    except OSError:
+        psa = {}
     only = set(args.only.split(',')) if args.only else None
     if args.url:
         url = args.url
@@ -490,7 +531,7 @@ async def scan(args):
                 dtcs, err = await e.read_dtcs()
                 if dtcs is not None:
                     for x in dtcs:
-                        x['text'] = dtc_text(model, extra, generic, x)
+                        x['text'] = dtc_text(model, extra, generic, x, psa, sae_p(d))
                 info['dtc'] = dtcs if dtcs is not None else {'err': err}
                 info['records'] = []
                 if model:

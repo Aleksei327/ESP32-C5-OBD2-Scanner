@@ -12,15 +12,66 @@ class KnowledgeBase {
   final Map<String, dynamic> data;
 
   /// [extraDtc] — отдельный файл с текстами ошибок под другой лицензией (ludwig-v, GPL):
-  /// не нашёлся — работаем без него.
-  static Future<KnowledgeBase> load(String asset, {String? extraDtc}) async {
+  /// не нашёлся — работаем без него. [psaCodes] — коды PSA из заводского списка
+  /// (tool/build_psa_codes.py); его нет в репозитории, только в локальной сборке.
+  static Future<KnowledgeBase> load(String asset, {String? extraDtc, String? psaCodes}) async {
     final kb = KnowledgeBase(jsonDecode(await rootBundle.loadString(asset)) as Map<String, dynamic>);
     if (extraDtc != null) {
       try {
         kb.addDtcTexts(jsonDecode(await rootBundle.loadString(extraDtc)) as Map<String, dynamic>);
       } catch (_) {}
     }
+    if (psaCodes != null) {
+      try {
+        kb.psa = jsonDecode(await rootBundle.loadString(psaCodes)) as Map<String, dynamic>;
+      } catch (_) {}
+    }
     return kb;
+  }
+
+  /// Коды PSA: {types: {A: {ru, en, fr}}, codes: {«4C0» | «A4C0» | «P1109»: {ru, fr, check, check_ru, typed}}}.
+  Map<String, dynamic> psa = const {};
+
+  /// Текст кода по списку PSA. На KWP код — 2 байта: первая цифра — тип неисправности
+  /// (7…F, 0 — без типа), остальные три — номер. [saeP] — блок пишет P-коды SAE (двигатель,
+  /// коробка): тогда ищется «P1109», а номер PSA не годится.
+  ({String text, String? check})? psaDtc(List<int> raw, String code, String lang, {required bool saeP}) {
+    final codes = psa['codes'] as Map?;
+    if (codes == null || raw.length != 2) return null;
+    Map? e;
+    String? type;
+    var num = '';
+    if (saeP) {
+      e = codes[code] as Map?;
+    } else {
+      final hex = raw.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
+      num = hex.substring(1);
+      if (hex[0] == '0') {
+        e = codes[num] as Map?;
+      } else if ('789ABCDEF'.contains(hex[0])) {
+        e = (codes[hex] ?? codes[num]) as Map?;
+        final t = (psa['types'] as Map?)?[hex[0]];
+        if (t != null && e?['typed'] != true) type = txt(t, lang);
+      } else {
+        return null;
+      }
+    }
+    String withType(String s) => type == null ? s : '$s ($type)';
+    if (e == null) {
+      // Номера нет в списке — хотя бы чей это раздел (датчик АКБ, климат…)
+      if (num.isEmpty) return null;
+      final n = int.parse(num, radix: 16);
+      for (final s in (psa['sections'] as List? ?? const [])) {
+        if (n >= int.parse(s['lo'] as String, radix: 16) && n <= int.parse(s['hi'] as String, radix: 16)) {
+          final name = (lang == 'ru' ? s['ru'] : s['name']) as String;
+          return (text: withType(txt(psa['unknown'], lang).replaceAll('{s}', name).replaceAll('{n}', num)), check: null);
+        }
+      }
+      return null;
+    }
+    final base = (lang == 'ru' ? e['ru'] ?? e['fr'] : e['fr']) as String;
+    final check = (lang == 'ru' ? e['check_ru'] ?? e['check'] : e['check']) as String?;
+    return (text: withType(base), check: check);
   }
 
   /// Тексты ошибок из дополнительного файла: только те, которых у модели нет.
@@ -86,6 +137,10 @@ class EcuDef {
   int get rx => _hexId(m['rx']);
   bool get optional => m['optional'] as bool? ?? false;
   String? get icon => m['icon'] as String?;
+
+  /// Блок пишет P-коды SAE (двигатель, коробка), а не коды PSA «тип + номер».
+  late final bool saeP =
+      models.any((x) => (x.m['dtc'] as Map?)?.keys.any((k) => '$k'.startsWith('P')) ?? false);
 
   late final List<EcuModel> models = [for (final x in (m['models'] as List? ?? [])) EcuModel(x as Map<String, dynamic>)];
 

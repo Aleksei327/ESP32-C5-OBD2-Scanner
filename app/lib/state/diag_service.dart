@@ -291,14 +291,17 @@ class DiagService {
   Future<List<Dtc>> readFaults(EcuDef d) => _run(link(d), (p) => p.readDtcs());
   Future<void> clearFaults(EcuDef d) => _run(link(d), (p) => p.clearDtcs());
 
-  /// Текст ошибки: из опознанной модели, иначе из любой модели этого места,
-  /// иначе общий текст кода SAE (generic — в интерфейсе это помечается).
-  ({String text, bool generic})? dtcInfo(EcuDef d, Dtc dtc, String lang) {
+  /// Текст ошибки: из опознанной модели, иначе из любой модели этого места, иначе из списка
+  /// кодов PSA, иначе общий текст кода SAE (generic — в интерфейсе это помечается).
+  /// [check] — что проверить, из списка PSA.
+  ({String text, bool generic, String? check})? dtcInfo(EcuDef d, Dtc dtc, String lang) {
     final m = link(d).model;
     final own = m?.dtcText(dtc.key, lang) ?? d.dtcText(dtc.key, lang);
-    if (own != null) return (text: own, generic: false);
+    final psa = kb.psaDtc(dtc.raw, dtc.code, lang, saeP: d.saeP);
+    if (own != null) return (text: own, generic: false, check: psa?.check);
+    if (psa != null) return (text: psa.text, generic: false, check: psa.check);
     final g = kb.genericDtc(dtc.code, lang);
-    return g == null ? null : (text: g, generic: true);
+    return g == null ? null : (text: g, generic: true, check: null);
   }
 
   String? dtcText(EcuDef d, Dtc dtc, String lang) => dtcInfo(d, dtc, lang)?.text;

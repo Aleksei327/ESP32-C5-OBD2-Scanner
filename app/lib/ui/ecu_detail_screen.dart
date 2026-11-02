@@ -372,6 +372,8 @@ class _FaultsTabState extends State<_FaultsTab> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Text(d.code, style: mono(context, 16).copyWith(fontWeight: FontWeight.w600)),
+                  if (!widget.def.saeP && d.psa != null)
+                    Text('  PSA ${d.psa}', style: mono(context, 13).copyWith(color: p.textDim)),
                   const Spacer(),
                   Pill(d.active ? t.faultActive : t.faultStored,
                       fg: d.active ? Colors.white : p.textDim,
@@ -380,6 +382,11 @@ class _FaultsTabState extends State<_FaultsTab> {
                 ]),
                 const SizedBox(height: 6),
                 Text(info?.text ?? t.unknownFault, style: TextStyle(color: p.text)),
+                if (info?.check != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(t.faultCheck(info!.check!), style: TextStyle(color: p.textDim, fontSize: 13)),
+                  ),
                 if (info?.generic ?? false)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),

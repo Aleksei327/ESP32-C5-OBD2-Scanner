@@ -46,7 +46,7 @@ python remote/scan.py              # every ECU in the knowledge base + OBD-II
 python remote/scan.py --only BSI,CMM
 ```
 
-Goes through every ECU in `app/assets/kb/c3_ii.json`: finds which ones answer, recognises the model by part number, reads fault codes (with texts from the knowledge base) and every data record, then OBD-II on bus A. The result goes to `scans/<date_time>/`: `report.md` and `scan.json` with raw answers. `scans/` stays out of git: it holds the car's VIN and part numbers. `scan.py` cannot send anything but reads; clearing faults is blocked there too.
+Goes through every ECU in `app/assets/kb/c3_ii.json`: finds which ones answer, recognises the model by part number, reads fault codes (with texts from the knowledge base, and from the local PSA code list `app/assets/kb/psa_codes.json` if you built it, see [the app README](../app/README.md#knowledge-base)) and every data record, then OBD-II on bus A. The result goes to `scans/<date_time>/`: `report.md` and `scan.json` with raw answers. `scans/` stays out of git: it holds the car's VIN and part numbers. `scan.py` cannot send anything but reads; clearing faults is blocked there too.
 
 ## Latency
 

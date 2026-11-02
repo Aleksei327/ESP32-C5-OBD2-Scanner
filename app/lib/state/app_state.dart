@@ -200,7 +200,8 @@ class AppState extends ChangeNotifier {
       final hello = await client.connect(adapterUrl);
       fw = hello['fw']?.toString() ?? '';
       batteryMv = (hello['mv'] as num?)?.toInt() ?? 0;
-      kb ??= await KnowledgeBase.load('assets/kb/c3_ii.json', extraDtc: 'assets/kb/c3_ii_dtc_gpl.json');
+      kb ??= await KnowledgeBase.load('assets/kb/c3_ii.json',
+          extraDtc: 'assets/kb/c3_ii_dtc_gpl.json', psaCodes: 'assets/kb/psa_codes.json');
       diag = DiagService(client, kb!);
       scanResults = [];
       _evSub = client.events.listen(_onEvent);

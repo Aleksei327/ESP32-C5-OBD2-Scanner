@@ -37,6 +37,39 @@ void main() {
     expect(Dtc([0x01, 0x30], 0x60, active: true).key, 'P0130');
   });
 
+  test('коды PSA: тип + номер; блоки с P-кодами ищут «P…»', () {
+    final kb = loadKb()
+      ..psa = {
+        'types': {
+          'A': {'ru': 'замыкание на плюс', 'en': 'short to battery', 'fr': 'Court-circuit au plus'},
+        },
+        'codes': {
+          '4C0': {'fr': 'fr-4C0', 'ru': 'Задний правый габарит', 'check': 'fr-check', 'check_ru': 'Габаритный фонарь'},
+          '9AB': {'fr': 'x (Circuit ouvert) y', 'ru': 'Икс (обрыв цепи)', 'typed': true},
+          'P1109': {'fr': 'fr-P1109'},
+        },
+        'sections': [
+          {'name': 'BECB', 'ru': 'датчик состояния АКБ', 'lo': 'FF0', 'hi': 'FFE'},
+        ],
+        'unknown': {'ru': 'Нет описания в списке PSA: раздел «{s}», номер {n}', 'en': 'No description: "{s}" {n}'},
+      };
+    (kb.psa['types'] as Map)['F'] = {'ru': 'без уточнения', 'en': 'unspecified', 'fr': 'Non caractérisé'};
+    expect(kb.psaDtc([0xFF, 0xF9], 'U3FF9', 'ru', saeP: false)!.text,
+        'Нет описания в списке PSA: раздел «датчик состояния АКБ», номер FF9 (без уточнения)');
+    expect(Dtc([0xA4, 0xC0], 0xF5).psa, 'A4C0');
+    expect(Dtc([0x01, 0x30, 0x00], 0x09).psa, isNull);
+    final light = kb.psaDtc([0xA4, 0xC0], 'B24C0', 'ru', saeP: false)!;
+    expect(light.text, 'Задний правый габарит (замыкание на плюс)');
+    expect(light.check, 'Габаритный фонарь');
+    expect(kb.psaDtc([0x04, 0xC0], 'P04C0', 'ru', saeP: false)!.text, 'Задний правый габарит');
+    expect(kb.psaDtc([0xA9, 0xAB], 'B29AB', 'ru', saeP: false)!.text, 'Икс (обрыв цепи)');  // тип уже в тексте
+    expect(kb.psaDtc([0x11, 0x09], 'P1109', 'ru', saeP: true)!.text, 'fr-P1109');
+    expect(kb.psaDtc([0x04, 0xC0], 'P04C0', 'ru', saeP: true), isNull);  // у двигателя номер PSA не годится
+    expect(kb.psaDtc([0x54, 0xC0], 'C14C0', 'ru', saeP: false), isNull);  // 5 — не тип PSA
+    expect(kb.ecus.firstWhere((e) => e.node == 'CMM').saeP, isTrue);
+    expect(kb.ecus.firstWhere((e) => e.node == 'BSI').saeP, isFalse);
+  });
+
   test('биты в нотации PSA-RE', () {
     final p = [0x03, 0x20, 0x8D, 0xFE, 0x41, 0x42];
     expect(Bits.parse('1.7-2.0').uint(p), 800);

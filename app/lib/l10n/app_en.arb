@@ -43,6 +43,7 @@
   "noFaults": "No faults",
   "unknownFault": "No description in the database",
   "genericSae": "generic SAE description",
+  "faultCheck": "Check: {what}",
   "gauges": "Gauges",
   "gaugesSub": "Engine · live",
   "rpm": "Engine speed",

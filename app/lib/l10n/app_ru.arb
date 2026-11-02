@@ -74,6 +74,14 @@
   "noFaults": "Ошибок нет",
   "unknownFault": "Нет описания в базе",
   "genericSae": "общее описание SAE",
+  "faultCheck": "Проверить: {what}",
+  "@faultCheck": {
+    "placeholders": {
+      "what": {
+        "type": "String"
+      }
+    }
+  },
   "gauges": "Датчики",
   "gaugesSub": "Двигатель · в реальном времени",
   "rpm": "Обороты",

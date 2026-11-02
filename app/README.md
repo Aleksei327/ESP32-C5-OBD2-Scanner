@@ -40,7 +40,7 @@ flutter test --tags sim --run-skipped          # integration test against the si
 | `assets/kb/c3_ii.json` | knowledge base for the C3 II (PSA AEE2004), generated from [PSA-RE](https://github.com/prototux/PSA-RE) — do not edit by hand; `PSA-RE-LICENCE.txt` next to it |
 | `assets/kb/c3_ii_dtc_gpl.json` | extra fault-code texts from [ludwig-v/arduino-psa-diag](https://github.com/ludwig-v/arduino-psa-diag), GPL-3.0 (`GPL-3.0.txt` next to it); generated too |
 | `assets/google_fonts/` | bundled Exo 2 and IBM Plex fonts with their OFL licence texts |
-| `tool/` | `build_kb.py` + `kb_ru.json` (knowledge base and its Russian texts), scripts that draw the app icon |
+| `tool/` | `build_kb.py` + `kb_ru.json` (knowledge base and its Russian texts), `build_psa_codes.py` (local PSA code list, see below), scripts that draw the app icon |
 
 ## Knowledge base
 
@@ -51,6 +51,8 @@ python -m pip install pyyaml
 python tool/build_kb.py       # from app/; downloads PSA-RE once into tool/.cache/
 ```
 
-Where a fault code has no text, the script adds it from two more sources: ludwig-v's PSA lists (GPL-3.0, so they go to the separate file `c3_ii_dtc_gpl.json`) and the generic SAE J2012 texts from [OBD Codes List](https://obdcodeslist.com/code-data.html). The app looks for a text in this order: the identified ECU model, any model of that ECU, the ludwig-v file, the generic SAE text. The generic text is used only for codes whose meaning the standard itself fixes (P0, P2, P34–P39, B0, C0, U0); in the manufacturer ranges, and in U3 where PSA puts its own BSI codes, it would be wrong. The app marks it as "generic SAE description".
+Where a fault code has no text, the script adds it from two more sources: ludwig-v's PSA lists (GPL-3.0, so they go to the separate file `c3_ii_dtc_gpl.json`) and the generic SAE J2012 texts from [OBD Codes List](https://obdcodeslist.com/code-data.html). The app looks for a text in this order: the identified ECU model, any model of that ECU, the ludwig-v file, the local PSA code list (below), the generic SAE text. The generic text is used only for codes whose meaning the standard itself fixes (P0, P2, P34–P39, B0, C0, U0); in the manufacturer ranges, and in U3 where PSA puts its own BSI codes, it would be wrong. The app marks it as "generic SAE description".
+
+**PSA code list (local only).** On KWP a PSA fault code is two bytes: the first hex digit is the kind of fault (7 remote, 8 no signal, 9 implausible, A short to battery, B short to ground, C open circuit, D/E below/above range, F unspecified), the other three are the number, and each ECU owns a range of numbers (BSI 0x400–0x5FF, climate 0x700–0x7FF…). The app shows the raw code next to the SAE-style one (`B24C0  PSA A4C0`). The texts can come from PSA's own diagnostic code list, but that document may not be reproduced, so neither it nor anything taken from it is in this repository. If you have a copy, `python tool/build_psa_codes.py <list.pdf> --dump` writes its texts to `tool/.cache/` for translation and `python tool/build_psa_codes.py <list.pdf>` builds `assets/kb/psa_codes.json`. Both are git-ignored. Without that file the app works as before. Where a number is not in the list, the app still names the ECU range and the kind of fault.
 
 Russian texts come from `tool/kb_ru.json` (English text → Russian); the list of strings not translated yet is written to `tool/.cache/untranslated.txt`. Generic SAE texts follow a pattern ("Fuel Temperature Sensor B Circuit Low"), so they are translated in parts: `sae_parts` (the component) and `sae_faults` (the kind of fault), put together by `tool/sae_ru.py`. `tool/kb_translate.py export` writes the untranslated strings to `tool/.cache/tr/` in batches, `merge` takes the translated batches back into `kb_ru.json`.
