@@ -10,7 +10,7 @@ adapter ──Wi-Fi── phone ──mobile internet── Cloudflare ── re
 
 - **Phone**: the app reaches the adapter over its Wi-Fi and the computer over mobile data. The phone keeps its internet: the adapter does not offer itself as a gateway, so Android leaves internet on the mobile network.
 - **Computer**: `relay.py` is a relay on `127.0.0.1:8790`. From outside it is reached through a free Cloudflare tunnel (`cloudflared`, no account); the computer needs no incoming connections, any internet works, even a phone hotspot.
-- **The key** is created anew on every `relay.py` start. Without it nobody can connect to the relay. The tunnel address is new every time as well.
+- **The key** is created anew on every `relay.py` start: 8 characters without 0/o and 1/l/i, so it can be typed by hand. Without it nobody can connect to the relay. The tunnel address is new every time as well. The tunnel runs HTTP/2 over TCP: QUIC kept dropping on the home network.
 
 ## How to run
 
@@ -24,7 +24,7 @@ adapter ──Wi-Fi── phone ──mobile internet── Cloudflare ── re
 
    `cloudflared` is a single file: [Cloudflare's download page](https://github.com/cloudflare/cloudflared/releases), put `cloudflared-windows-amd64.exe` at `%LOCALAPPDATA%\cloudflared\cloudflared.exe`, or `winget install Cloudflare.cloudflared`.
 
-2. On the phone: join the adapter's Wi-Fi, tap "Connect adapter" in the app, then Settings → **Remote assistant**: paste the address and tap "Start". While the assistant is connected, a green bar with a stop button is shown on top of every screen and the screen stays on.
+2. On the phone: tap "Connect adapter" in the app (it joins the adapter's Wi-Fi by itself), then Settings → **Remote assistant**: paste the address and tap "Start". While the assistant is connected, a green bar with a stop button is shown on top of every screen and the screen stays on.
 
 3. On the computer — commands to the adapter:
 
@@ -38,6 +38,15 @@ adapter ──Wi-Fi── phone ──mobile internet── Cloudflare ── re
    `--url ws://192.168.4.1:81/ws` talks to the adapter directly, `--url ws://127.0.0.1:8765` to the simulator.
 
 `adapter.py` only sends read requests (and fault clearing): it does not send services that change anything in the ECUs.
+
+## Full car scan
+
+```sh
+python remote/scan.py              # every ECU in the knowledge base + OBD-II
+python remote/scan.py --only BSI,CMM
+```
+
+Goes through every ECU in `app/assets/kb/c3_ii.json`: finds which ones answer, recognises the model by part number, reads fault codes (with texts from the knowledge base) and every data record, then OBD-II on bus A. The result goes to `scans/<date_time>/`: `report.md` and `scan.json` with raw answers. `scans/` stays out of git: it holds the car's VIN and part numbers. `scan.py` cannot send anything but reads; clearing faults is blocked there too.
 
 ## Latency
 

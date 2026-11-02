@@ -33,6 +33,9 @@ import websockets
 HERE = os.path.dirname(os.path.abspath(__file__))
 SESSION = os.path.join(HERE, '.session.json')
 PORT = 8790
+# Ключ набирают руками на телефоне: только строчные, без 0/o и 1/l/i
+KEY_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789'
+KEY_LEN = 8
 
 
 def log(*a):
@@ -113,7 +116,8 @@ def find_cloudflared():
 
 def start_tunnel(exe, port, on_url):
     """cloudflared пишет адрес вида https://xxx.trycloudflare.com в свой лог (stderr)."""
-    proc = subprocess.Popen([exe, 'tunnel', '--no-autoupdate', '--url', f'http://127.0.0.1:{port}'],
+    # http2 поверх TCP: QUIC (UDP) на домашней сети рвался каждые 15 с — «no recent network activity»
+    proc = subprocess.Popen([exe, 'tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', f'http://127.0.0.1:{port}'],
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
                             encoding='utf-8', errors='replace')
 
@@ -136,7 +140,7 @@ async def main():
     ap.add_argument('--no-tunnel', action='store_true', help='без туннеля Cloudflare')
     args = ap.parse_args()
 
-    key = secrets.token_urlsafe(18)
+    key = ''.join(secrets.choice(KEY_CHARS) for _ in range(KEY_LEN))
     relay = Relay(key)
     session = {'port': args.port, 'key': key, 'phone_url': None}
 

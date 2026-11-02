@@ -40,3 +40,6 @@ app/tool/.cache/
 
 # Удалённый помощник: ключ текущего сеанса (remote/relay.py)
 remote/.session.json
+
+# Опросы машины (remote/scan.py): VIN и номера деталей — только локально
+scans/
