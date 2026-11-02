@@ -4,7 +4,7 @@
 
 A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, together with a read-only Android app. The first target is my own Citroën C3 II (2011, 1.4 KFT): ECU list, fault codes (read and clear), live data, freeze frames, a bus monitor and a PDF report. Other cars are added through a JSON knowledge base, without changing the firmware.
 
-> **Development status:** the schematic and the single-sided PCB are complete — the board is routed on one copper layer with **no wire jumpers**. The app runs against a Python simulator and has been tested on a phone. No board has been etched or brought up yet: every hardware figure below is a design value, not a measurement.
+> **Status (November 2026):** board v1 is etched, assembled in its enclosure and working. On the bench: self-test of both CAN channels, Wi-Fi, the app and remote access through the phone. On 2 November, the first full scan of the C3 II: 10 ECUs answered, fault codes and live data read (`remote/scan.py`).
 
 ![Board v1, 3D view](DOCS/images/board-3d-front.png)
 
@@ -17,7 +17,7 @@ A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, togethe
 | CAN channel B | OBD 3/8 | PSA Diag-on-CAN through the BSI, access to every ECU |
 | Transceivers | 2 × SN65HVD230 (SOIC-8), desoldered from Waveshare modules | 3.3 V, enough for the C3; Rs on D9/D5 with pull-ups gives a hardware listen-only mode. CAN-FD transceivers in v2 |
 | Power | OBD 16 → fuse → HS1M → IRFB4110 source follower (≤ 27 V) → LM2596S-ADJ (4.9 V) → SS34 (+ 1.5KE6.8CA TVS) → 3.3 V LDO on the XIAO | all from parts in stock; survives a 24 V jump start and surges up to 100 V |
-| Hardware | own single-sided 40 × 70 mm board inside an OBD2 enclosure with a built-in connector; tracks on the bottom only, no jumpers | one dongle, no cables |
+| Hardware | own single-sided 40 × 60 mm board inside an OBD2 enclosure with a built-in connector; tracks on the bottom only, no jumpers | one dongle, no cables |
 | App | Flutter for Android (Galaxy A55): read-only plus fault-code clearing; two themes; Russian and English | |
 | Link | Wi-Fi, JSON over WebSocket; the adapter is a "dumb" transport, all logic lives in the app | a new car is a new JSON file |
 
@@ -49,7 +49,8 @@ PDF exports: [schematic](hardware/scaner_v1/build/scaner_v1.pdf), [placement and
 - Full diagnostics run on pins **3/8** (Diag-on-CAN, 500 kbit/s) through the BSI. Pins **6/14** only give legislated engine OBD-II.
 - Protocols: PSA-style KWP2000 (almost every ECU of the C3 II) and UDS, both over CAN (ISO-TP). The app finds out by itself which one an ECU speaks and recognises the ECU model by its part number.
 - ECU addresses (request:response): BSI `752:652`, engine `6A8:688`, ABS/ESP `6AD:68D`, airbag `744:644`, instrument cluster `75F:65F`.
-- Which engine ECU is fitted is not known yet; the scanner will tell.
+- On our C3 II 1.4 KFT the engine ECU is a Valeo V34 (KWP, session `81`). Answering: BSI, engine, ABS MK70, power steering, steering-column switches, instrument cluster, display, radio, airbag and the battery sensor.
+- Terminators: pins 6–14 already have both in the car (57 Ω), pins 3–8 only the BSI one (128 Ω), so the board has R8 fitted and R7 left out.
 
 ## Rules
 
