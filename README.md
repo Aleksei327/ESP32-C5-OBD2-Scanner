@@ -8,6 +8,15 @@ A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, togethe
 
 ![Board v1, 3D view](DOCS/images/board-3d-front.png)
 
+## The app
+
+| | | |
+| --- | --- | --- |
+| ![Car screen](DOCS/images/app-car.png) | ![Auto scan](DOCS/images/app-scan.png) | ![Engine live data](DOCS/images/app-live-data.png) |
+| ![Gauges, dark theme](DOCS/images/app-gauges-dark.png) | ![Bus monitor](DOCS/images/app-bus-monitor.png) | ![Settings, dark theme](DOCS/images/app-settings-dark.png) |
+
+App 0.1.3 in English. For these screenshots it is connected to the adapter simulator ([`sim/`](sim/README.md)), not to the car, so the ECUs and values are simulated.
+
 ## Key decisions
 
 | What | Choice | Why |

@@ -8,6 +8,15 @@
 
 ![Плата v1 в 3D](DOCS/images/board-3d-front.png)
 
+## Приложение
+
+| | | |
+| --- | --- | --- |
+| ![Экран машины](DOCS/images/app-car.png) | ![Автоскан](DOCS/images/app-scan.png) | ![Живые данные двигателя](DOCS/images/app-live-data.png) |
+| ![Датчики, тёмная тема](DOCS/images/app-gauges-dark.png) | ![Монитор шины](DOCS/images/app-bus-monitor.png) | ![Настройки, тёмная тема](DOCS/images/app-settings-dark.png) |
+
+Приложение 0.1.3 на английском. На этих снимках оно подключено не к машине, а к симулятору адаптера ([`sim/`](sim/README.ru.md)), поэтому блоки и значения симулированные.
+
 ## Решения
 
 | Что | Решение | Почему |
