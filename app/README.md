@@ -18,7 +18,7 @@ flutter pub get        # also generates lib/l10n/gen from the .arb files
 flutter run            # phone connected over USB
 ```
 
-Connection: the adapter's access point `SCANER-C5` and `ws://192.168.4.1:81/ws`, or the [simulator](../sim/README.md) at `ws://<PC IP>:8765` (Settings → adapter address).
+Connection: the adapter's access point `SCANER-C5-XXXX` (name and password: the `wifi` command in its console), address `ws://192.168.4.1:81/ws`, or the [simulator](../sim/README.md) at `ws://<PC IP>:8765`. The app joins the adapter's network by itself: the connect screen has the network name and password. That network serves only the app, so the phone's internet stays on mobile data. Joined from the phone's Wi-Fi settings instead, a Samsung makes it the default network for the whole phone and every app loses internet.
 
 Tests:
 

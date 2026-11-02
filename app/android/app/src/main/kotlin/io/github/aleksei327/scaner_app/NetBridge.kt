@@ -4,8 +4,12 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.net.wifi.WifiNetworkSpecifier
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PatternMatcher
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -25,9 +29,12 @@ import java.util.concurrent.TimeUnit
  * 1. Адаптер раздаёт Wi-Fi без интернета, а интернет у телефона остаётся на мобильных данных
  *    (так и нужно). Но тогда запросы к 192.168.4.1 по умолчанию тоже уходят в мобильную сеть.
  *    bindForHost привязывает процесс к той сети Wi-Fi, в которой лежит адрес адаптера.
+ *    Samsung всё равно делает Wi-Fi без интернета сетью по умолчанию для всего телефона, поэтому
+ *    joinWifi подключает Wi-Fi адаптера как локальную сеть только этого приложения (Android 10+).
  *
  * 2. Удалённый помощник: мост между адаптером (через Wi-Fi) и посредником на компьютере
  *    (через интернет, wss://…/phone?key=…). Сообщения протокола передаются как есть в обе стороны.
+ *    Мобильные данные просим явно: Samsung делает Wi-Fi адаптера сетью по умолчанию и гасит 5G/4G.
  */
 class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAwake: (Boolean) -> Unit) {
     private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -36,6 +43,9 @@ class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAw
 
     private var adapterWs: WebSocket? = null
     private var relayWs: WebSocket? = null
+    private var cellCb: ConnectivityManager.NetworkCallback? = null
+    private var wifiCb: ConnectivityManager.NetworkCallback? = null
+    @Volatile private var localNet: Network? = null
     private var session = 0
     private var toAdapter = 0
     private var toRelay = 0
@@ -44,6 +54,7 @@ class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAw
         MethodChannel(messenger, "scaner/net").setMethodCallHandler { call, result ->
             when (call.method) {
                 "bindForHost" -> result.success(bindForHost(call.argument<String>("host") ?: ""))
+                "joinWifi" -> joinWifi(call.argument<String>("ssid") ?: "", call.argument<String>("pass") ?: "", result)
                 "remoteStart" -> {
                     remoteStart(call.argument<String>("adapter") ?: "", call.argument<String>("relay") ?: "")
                     result.success(null)
@@ -74,13 +85,59 @@ class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAw
         if (!ipv4.matches(host)) return null
         val addr = InetAddress.getByName(host)
         if (addr.isLoopbackAddress) return null
-        for (n in cm.allNetworks) {
+        for (n in listOfNotNull(localNet) + cm.allNetworks) {
             val caps = cm.getNetworkCapabilities(n) ?: continue
             if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
             val lp = cm.getLinkProperties(n) ?: continue
             if (lp.routes.any { !it.isDefaultRoute && it.matches(addr) }) return n
         }
         return null
+    }
+
+    /**
+     * Wi-Fi адаптера через WifiNetworkSpecifier: сеть только для этого приложения, сетью по умолчанию
+     * она не становится, и интернет всего телефона остаётся на мобильных данных. Android показывает
+     * окно «Подключиться к …?». Имя на «-» — шаблон по началу имени (выбор из списка), иначе точное имя.
+     * Ответ true, когда сеть поднялась; false — отказ, не нашлась за 60 с или Android старше 10.
+     */
+    private fun joinWifi(ssid: String, pass: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || ssid.isEmpty()) {
+            result.success(false)
+            return
+        }
+        if (localNet?.let { cm.getNetworkCapabilities(it) } != null) {
+            result.success(true)
+            return
+        }
+        wifiCb?.let { try { cm.unregisterNetworkCallback(it) } catch (e: IllegalArgumentException) {} }
+        val spec = WifiNetworkSpecifier.Builder()
+            .apply {
+                if (ssid.endsWith("-")) setSsidPattern(PatternMatcher(ssid, PatternMatcher.PATTERN_PREFIX)) else setSsid(ssid)
+                if (pass.isNotEmpty()) setWpa2Passphrase(pass)
+            }
+            .build()
+        val req = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .setNetworkSpecifier(spec)
+            .build()
+        var answered = false
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                localNet = network
+                main.post { if (!answered) { answered = true; result.success(true) } }
+            }
+
+            override fun onUnavailable() {
+                main.post { if (!answered) { answered = true; result.success(false) } }
+            }
+
+            override fun onLost(network: Network) {
+                if (network == localNet) localNet = null
+            }
+        }
+        wifiCb = cb
+        cm.requestNetwork(req, cb, 60_000)
     }
 
     private fun bindForHost(host: String): Boolean {
@@ -94,6 +151,29 @@ class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAw
         main.post { sink?.success(m) }
     }
 
+    /**
+     * Мобильные данные для связи с посредником. Пока запрос не отпущен (remoteStop), Android держит их
+     * поднятыми, даже если сетью по умолчанию стал Wi-Fi адаптера. Нет SIM или данные выключены — через 10 с null.
+     */
+    private fun requestCellular(onReady: (Network?) -> Unit) {
+        val req = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        var done = false
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                main.post { if (!done) { done = true; onReady(network) } }
+            }
+
+            override fun onUnavailable() {
+                main.post { if (!done) { done = true; onReady(null) } }
+            }
+        }
+        cellCb = cb
+        cm.requestNetwork(req, cb, 10_000)
+    }
+
     private fun remoteStart(adapterUrl: String, relayUrl: String) {
         remoteStop(null, null)
         val my = ++session
@@ -101,10 +181,13 @@ class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAw
         toRelay = 0
         emit("connecting", null)
         main.post { keepAwake(true) }
+        requestCellular { cell -> if (my == session) connect(my, adapterUrl, relayUrl, cell) }
+    }
 
+    private fun connect(my: Int, adapterUrl: String, relayUrl: String, cell: Network?) {
         val host = try { java.net.URI(adapterUrl).host ?: "" } catch (e: Exception) { "" }
         val wifi = wifiFor(host)
-        val inet = cm.activeNetwork  // интернет — сеть по умолчанию (мобильные данные), а не привязка процесса
+        val inet = cell ?: cm.activeNetwork  // интернет — мобильные данные, без них сеть по умолчанию
 
         val adapterClient = OkHttpClient.Builder()
             .apply { wifi?.let { socketFactory(it.socketFactory) } }
@@ -183,6 +266,8 @@ class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAw
         relayWs?.close(1000, null)
         adapterWs = null
         relayWs = null
+        cellCb?.let { try { cm.unregisterNetworkCallback(it) } catch (e: IllegalArgumentException) {} }
+        cellCb = null
         main.post { keepAwake(false) }
         if (state != null) emit(state, msg)
     }

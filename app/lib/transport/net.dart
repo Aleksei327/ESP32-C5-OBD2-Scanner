@@ -25,6 +25,18 @@ class Net {
     }
   }
 
+  /// Подключиться к Wi-Fi адаптера как к сети только этого приложения (Android 10+): интернет
+  /// всего телефона остаётся на мобильных данных. [ssid] на «-» — любая сеть с таким началом имени.
+  /// false — отказ в окне Android или сеть не нашлась. Не Android — делать нечего, true.
+  static Future<bool> joinWifi(String ssid, String pass) async {
+    if (!_android) return true;
+    try {
+      return await _m.invokeMethod<bool>('joinWifi', {'ssid': ssid, 'pass': pass}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<void> remoteStart(String adapterUrl, String relayUrl) =>
       _m.invokeMethod('remoteStart', {'adapter': adapterUrl, 'relay': relayUrl});
 

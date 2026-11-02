@@ -18,6 +18,8 @@ class AppState extends ChangeNotifier {
     locale = Locale(_prefs.getString('lang') ?? 'ru');
     theme = AppThemeKind.values[_prefs.getInt('theme') ?? AppThemeKind.bright.index];
     adapterUrl = _prefs.getString('url') ?? 'ws://192.168.4.1:81/ws';
+    wifiSsid = _prefs.getString('wifiSsid') ?? 'SCANER-';
+    wifiPass = _prefs.getString('wifiPass') ?? '';
     remoteUrl = _prefs.getString('remote') ?? '';
     final slots = _prefs.getStringList('gauges');
     if (slots != null && slots.length == defaultGaugeSlots.length) gaugeSlots = slots;
@@ -141,6 +143,11 @@ class AppState extends ChangeNotifier {
   AppThemeKind theme = AppThemeKind.bright;
   String adapterUrl = 'ws://192.168.4.1:81/ws';
 
+  /// Wi-Fi адаптера, к которому приложение подключается само (Net.joinWifi). Пароль пустой —
+  /// телефон подключают к сети адаптера в настройках Wi-Fi, как раньше.
+  String wifiSsid = 'SCANER-';
+  String wifiPass = '';
+
   bool connecting = false;
   bool get connected => client.connected;
   String? connectError;
@@ -174,11 +181,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setWifi(String ssid, String pass) {
+    wifiSsid = ssid.trim();
+    wifiPass = pass.trim();
+    _prefs.setString('wifiSsid', wifiSsid);
+    _prefs.setString('wifiPass', wifiPass);
+  }
+
   Future<void> connect() async {
     connecting = true;
     connectError = null;
     notifyListeners();
     try {
+      if (wifiPass.isNotEmpty && !await Net.joinWifi(wifiSsid, wifiPass)) {
+        connectError = 'wifi_join';
+        return;
+      }
       final hello = await client.connect(adapterUrl);
       fw = hello['fw']?.toString() ?? '';
       batteryMv = (hello['mv'] as num?)?.toInt() ?? 0;
