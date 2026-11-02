@@ -11,10 +11,10 @@ Built directly on the board from parts in stock. The input comes after the [limi
 | LM2596S-ADJ | TO-263 package | from stock |
 | R3 (output → FB) | 3.0 kΩ | Vout = 1.23 × (1 + R3/R4) = 1.23 × 4 = **4.92 V** |
 | R4 (FB → GND) | 1 kΩ | the datasheet suggests 1–5 kΩ for the lower resistor |
-| Inductor | 120 µH (marking 121), shielded SMD 12×12×4 mm | from stock. A 68 µH 10×3 mm part would also work, the large one has more current margin |
+| Inductor | 100 µH (marking 101), through-hole with a ferrite sleeve, Ø10 × 13.5 mm, 5 mm pitch, 0.3–0.35 mm wire | from stock. Our load is ~0.2 A with ~0.4 A peaks — enough. Stands on top, the tallest part: ~1.7 mm below the lid |
 | Diode | SS34 (40 V, 3 A) | the switching node never sees more than ~27 V |
-| Cin | 100 µF / 50 V + 100 nF | shared with the follower output |
-| Cout | 220 µF / 16–25 V low ESR + 100 nF | |
+| Cin | 100 µF / 63 V (10 × 12.3 mm can, 5 mm pitch, ESR 0.13 Ω) + 100 nF | shared with the follower output |
+| Cout | 220 µF / 25 V low ESR (8 × 12.3 mm can, 3.5 mm pitch, ESR 0.13 Ω) + 100 nF | not a polymer cap or ceramics alone: below ~0.05 Ω ESR the LM2596 may oscillate |
 | ON/OFF (pin 5) | to GND | regulator always on |
 | Isolation diode | SS34 | from the output to the XIAO 5V pin |
 | TVS | 1.5KE6.8CA | on the 5V rail at the XIAO, see below |

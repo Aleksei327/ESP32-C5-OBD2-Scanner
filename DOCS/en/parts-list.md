@@ -19,19 +19,19 @@ When the enclosure arrives: check that the connector has pins 3, 4, 5, 6, 8, 14,
 
 **Power** (see [power protection](power-protection.md) and [DC-DC](dc-dc-5v.md)):
 
-- 1 A fuse, 5×20 glass, and clips;
+- SMD fuse Littelfuse Nano² (2410), T2A — from stock;
 - HS1M;
 - IRFB4110;
-- 15 V zeners — **3 pcs** (check you have enough);
-- resistors 47 kΩ, 100 Ω, 1 kΩ, 3.0 kΩ;
-- LM2596S-ADJ and a 120 µH inductor (marking 121, shielded 12×12 mm);
+- zeners (glass DO-35): one 30 V and one 12 V — in stock;
+- resistors 47–51 kΩ, 100 Ω, 1 kΩ, 3.0 kΩ;
+- LM2596S-ADJ and a 100 µH inductor (marking 101, through-hole Ø10 × 13.5 mm with a ferrite sleeve) — in stock;
 - SS34 — 2 pcs;
 - 1.5KE6.8CA TVS (on the 5V rail);
-- capacitors 100 µF / 50 V, 220 µF / 16–25 V low ESR, 100 nF, 10 µF.
+- capacitors 100 µF / 63 V and 220 µF / 25 V low ESR (both in stock, 10 × 12.3 and 8 × 12.3 mm), 100 nF, 10 µF.
 
-**Battery voltage divider:** 220 kΩ, 33 kΩ, 100 nF.
+**Battery voltage divider:** 200 kΩ, 33 kΩ, 100 nF (with a different upper resistor, change VBAT_DIVIDER in the firmware).
 
-**CAN:** 10 kΩ resistors — 2 pcs (Rs pull-ups), 120 Ω — 2 pcs (terminators), 100 nF — 2 pcs. All resistors and capacitors are 1206.
+**CAN:** 10–12 kΩ resistors — 2 pcs (Rs pull-ups), 120 Ω — 2 pcs (terminators), 100 nF — 2 pcs. All resistors and capacitors are 1206.
 
 **Other:** female headers 1×7 and male pin headers for the XIAO, wire from the connector to the board.
 

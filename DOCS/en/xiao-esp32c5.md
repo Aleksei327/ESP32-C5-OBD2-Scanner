@@ -42,7 +42,7 @@ Inside the board and not on the header: LED on GPIO27, BOOT button on GPIO28, ba
 
 **D6 (GPIO11).** The chip writes its boot log there. A CAN TX on this pin would push that log into the car's bus as garbage.
 
-**Pull-ups.** The transceiver Rs pins (D9 and D5) get 10 kΩ to 3.3 V each. While the ESP32 boots or is flashed, nothing drives these pins, and the pull-ups keep the transceivers in listen-only mode, so nothing reaches the car. More in [SN65HVD230](can-sn65hvd230.md).
+**Pull-ups.** The transceiver Rs pins (D9 and D5) get 10–12 kΩ to 3.3 V each. While the ESP32 boots or is flashed, nothing drives these pins, and the pull-ups keep the transceivers in listen-only mode, so nothing reaches the car. More in [SN65HVD230](can-sn65hvd230.md).
 
 **Powering through the 5V pin.** This is the USB line, and the wiki does not say whether it has its own diode. That is why our DC-DC delivers ~4.6 V to this pin, slightly less than USB. With a laptop plugged in while running from the car, nothing flows into the laptop. More in [DC-DC](dc-dc-5v.md).
 

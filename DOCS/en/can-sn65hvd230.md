@@ -36,10 +36,10 @@ With our board, a complete module is only needed for the STM32 bench.
 | 7 CANH | CAN-H bus | OBD 6 | OBD 3 |
 | 8 Rs | mode | D9 (GPIO9) | D5 (GPIO24) |
 
-- **Rs is pulled up to 3.3 V** with 10 kΩ (R11, R12). While the ESP32 boots or is being flashed, the transceivers physically cannot transmit anything into the car. The firmware pulls Rs low only when it is time to transmit.
+- **Rs is pulled up to 3.3 V** with 10–12 kΩ (R11, R12). While the ESP32 boots or is being flashed, the transceivers physically cannot transmit anything into the car. The firmware pulls Rs low only when it is time to transmit.
 - No pull-ups on D: while Rs is high the driver is off whatever D does. The firmware first starts the CAN controller (D = 1, recessive) and only then pulls Rs low.
 - 100 nF on VCC right at the pin (C6, C7).
-- **Terminator:** 120 Ω on each channel (R7, R8), enabled by solder jumper JP2/JP3, open by default. Whether channel 3/8 needs it will be decided by a measurement on the car (see [board v1](board-v1.md)).
+- **Terminator:** 120 Ω on each channel (R7, R8), placed straight across H and L with no jumper: left out by default (DNP); a measurement on the car decides whether to fit it (see [board v1](board-v1.md)). On the C3 II: R7 left out (6–14 = 57 Ω), R8 fitted (3–8 = 128 Ω).
 
 ## When CAN-FD is needed
 

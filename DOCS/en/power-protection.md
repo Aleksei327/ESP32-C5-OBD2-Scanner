@@ -20,21 +20,21 @@ OBD pin 16 always carries +12 V from the battery, but it is far from clean:
 Instead of a TVS, a linear limiter (source follower) is used. It passes normal voltage and absorbs anything above ~27 V. The LM2596S-ADJ DC-DC follows it (see [DC-DC](dc-dc-5v.md)).
 
 ```text
-OBD 16 ─► 1 A fuse ─► HS1M ─► IRFB4110 follower (output ≤ ~27 V) ─► LM2596S-ADJ ─► 4.9 V
+OBD 16 ─► T2A fuse ─► HS1M ─► IRFB4110 follower (output ≤ ~27 V) ─► LM2596S-ADJ ─► 4.9 V
 ```
 
 | Part | Connected | Why |
 | --- | --- | --- |
-| 1 A fuse (ordinary, from stock) | OBD 16 → HS1M | last line of defence: if something inside shorts, this fuse blows, not the one in the car's fuse box |
+| T2A fuse, SMD Nano² 2410 (from stock) | OBD 16 → HS1M | last line of defence: if something inside shorts, this fuse blows, not the one in the car's fuse box |
 | HS1M diode (1000 V, 1 A) | anode to the fuse, cathode to the IRFB4110 drain | reverse polarity and negative spikes |
 | IRFB4110 (100 V) | drain after the HS1M, source to the LM2596 input | follower: passes the supply but never more than ~27 V |
-| 47 kΩ resistor, 1206 | from the drain to the gate reference node | gate bias; 1206 because it can see tens of volts |
-| Two 15 V zeners in series | from the reference node to GND, cathode to the reference | 30 V threshold: the output becomes 30 − ~3.5 = ~26.5 V |
+| 51 kΩ resistor, 1206 (47 kΩ works too) | from the drain to the gate reference node | gate bias; 1206 because it can see tens of volts |
+| 30 V zener (glass DO-35) | from the reference node to GND, cathode to the reference | 30 V threshold: the output becomes 30 − ~3.5 = ~26.5 V. 30 V zeners spread 28–32 V, so the output is 24.5–28.5 V |
 | 100 Ω resistor | reference node → gate | keeps the follower from oscillating |
-| 15 V zener | gate–source, cathode to the gate | the IRFB4110 gate is rated ±20 V, and at power-up the gate already sees 30 V while the capacitors are still empty |
-| 100 µF / 50 V + 100 nF | source → GND | LM2596 input |
+| 12 V zener (glass DO-35) | gate–source, cathode to the gate | the IRFB4110 gate is rated ±20 V, and at power-up the gate already sees 30 V while the capacitors are still empty. In normal operation the gate–source voltage is ~3.5–5 V, so the zener stays off |
+| 100 µF / 63 V + 100 nF | source → GND | LM2596 input |
 
-It also gives a soft start: the gate charges through 47 kΩ in about a millisecond, so the inrush current into the capacitors is small.
+It also gives a soft start: the gate charges through 51 kΩ in about a millisecond, so the inrush current into the capacitors is small.
 
 ## What happens in each case
 
@@ -57,4 +57,4 @@ The 5V rail after the DC-DC carries a 1.5KE6.8CA as insurance in case the LM2596
 
 ## Bench check
 
-Before the car, test on a current-limited adjustable supply: slowly raise the input to 35–40 V and make sure the follower output stays at ~27 V or below and the transistor is only warm.
+Before the car, test on a current-limited adjustable supply: slowly raise the input to 35–40 V and make sure the follower output stays at ~27 V or below (up to 28.5 V with the spread of the 30 V zener) and the transistor is only warm.

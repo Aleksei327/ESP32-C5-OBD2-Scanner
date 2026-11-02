@@ -33,6 +33,12 @@ def uid():
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f'scaner_v1/{_uuid_n[0]}'))
 
 
+def sym_uid(ref):
+    # По обозначению, а не по счётчику: плата держит связь с символом по этому uuid,
+    # и он не должен съезжать, когда в PARTS добавляют или убирают детали.
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'scaner_v1/sym/{ref}'))
+
+
 ROOT = str(uuid.uuid5(uuid.NAMESPACE_URL, 'scaner_v1/root'))
 
 
@@ -156,38 +162,39 @@ def pin_world(X, Y, rot, px, py, pa):
 R0805 = 'Resistor_SMD:R_1206_3216Metric'   # у тебя резисторы и конденсаторы 1206 (3.2 мм)
 R1206 = 'Resistor_SMD:R_1206_3216Metric'
 C0805 = 'Capacitor_SMD:C_1206_3216Metric'
-CP8 = 'Capacitor_THT:CP_Radial_D8.0mm_P3.50mm'
+CP8 = 'Capacitor_THT:CP_Radial_D8.0mm_P3.50mm'           # электролиты стоя, обе банки высотой 12,3
+CP10 = 'Capacitor_THT:CP_Radial_D10.0mm_P5.00mm'
 SMA = 'Diode_SMD:D_SMA'
-DO35 = 'Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal'      # стеклянные стабилитроны — лёжа
+DO35 = 'scaner:D_DO-35_P5.08mm_Horizontal'              # стеклянные стабилитроны — лёжа, корпус 3,5 x 1,9
 DO201 = 'Diode_THT:D_DO-201AD_P12.70mm_Horizontal'      # TVS 1.5KE — лёжа
-SJ = 'Jumper:SolderJumper-2_P1.3mm_Open_RoundedPad1.0x1.5mm'
+XIAO_NC = {'3', '4', '5', '7'}                          # D2, D3, D4, D6 не подключены — без пятаков
 
 # (ref, lib_id, value, footprint, x, y, rot, {pin: net}, dnp)
 PARTS = [
     # 1. вход, защита, замер АКБ
     ('J1', 'Connector_Generic:Conn_01x03', 'OBD питание', 'Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical',
      30.48, 66.04, 0, {'1': 'VBAT_OBD', '2': 'GND', '3': 'GND'}, False),
-    ('F1', 'Device:Fuse', '1A 5x20', 'Fuse:Fuseholder_Clip-5x20mm_Littelfuse_111_Inline_P20.00x5.00mm_D1.05mm_Horizontal',
+    # F1 — Littelfuse Nano² 2410 (6,1 x 2,7 мм) T2A, с задержкой, из запаса
+    ('F1', 'Device:Fuse', 'T2A Nano2', 'Fuse:Fuse_Littelfuse-NANO2-451_453',
      50.8, 58.42, 0, {'1': 'VBAT_OBD', '2': 'VIN_F'}, False),
     ('D2', 'Device:D', 'HS1M', SMA, 66.04, 55.88, 180, {'1': 'VIN_PROT', '2': 'VIN_F'}, False),
-    ('R1', 'Device:R', '47k', R1206, 91.44, 66.04, 0, {'1': 'VIN_PROT', '2': 'GATE_REF'}, False),
-    ('D3', 'Device:D_Zener', '15V', DO35, 91.44, 81.28, 0, {'1': 'GATE_REF', '2': 'ZMID'}, False),
-    ('D4', 'Device:D_Zener', '15V', DO35, 91.44, 93.98, 0, {'1': 'ZMID', '2': 'GND'}, False),
+    ('R1', 'Device:R', '51k', R1206, 91.44, 66.04, 0, {'1': 'VIN_PROT', '2': 'GATE_REF'}, False),
+    ('D3', 'Device:D_Zener', '30V', DO35, 91.44, 81.28, 0, {'1': 'GATE_REF', '2': 'GND'}, False),
     ('R2', 'Device:R', '100', R0805, 106.68, 76.2, 0, {'1': 'GATE_REF', '2': 'Q1_G'}, False),
     ('Q1', 'Transistor_FET:Q_NMOS_GDS', 'IRFB4110', 'Package_TO_SOT_THT:TO-220-3_Horizontal_TabDown',
      127.0, 66.04, 0, {'1': 'Q1_G', '2': 'VIN_PROT', '3': 'VIN_BUCK'}, False),
-    ('D5', 'Device:D_Zener', '15V', DO35, 127.0, 86.36, 0, {'1': 'Q1_G', '2': 'VIN_BUCK'}, False),
-    ('JP1', 'Jumper:SolderJumper_2_Open', 'BYPASS_Q1', SJ, 127.0, 45.72, 0, {'1': 'VIN_PROT', '2': 'VIN_BUCK'}, False),
-    ('R9', 'Device:R', '220k', R1206, 152.4, 66.04, 0, {'1': 'VIN_PROT', '2': 'VBAT_ADC'}, False),
+    ('D5', 'Device:D_Zener', '12V', DO35, 127.0, 86.36, 0, {'1': 'Q1_G', '2': 'VIN_BUCK'}, False),
+    ('R9', 'Device:R', '200k', R1206, 152.4, 66.04, 0, {'1': 'VIN_PROT', '2': 'VBAT_ADC'}, False),
     ('R10', 'Device:R', '33k', R0805, 152.4, 81.28, 0, {'1': 'VBAT_ADC', '2': 'GND'}, False),
     ('C8', 'Device:C', '100n', C0805, 162.56, 81.28, 0, {'1': 'VBAT_ADC', '2': 'GND'}, False),
     # 2. DC-DC
-    ('C1', 'Device:C_Polarized', '100u/50V', CP8, 187.96, 66.04, 0, {'1': 'VIN_BUCK', '2': 'GND'}, False),
+    ('C1', 'Device:C_Polarized', '100u/63V', CP10, 187.96, 66.04, 0, {'1': 'VIN_BUCK', '2': 'GND'}, False),
     ('C2', 'Device:C', '100n/50V', C0805, 203.2, 66.04, 0, {'1': 'VIN_BUCK', '2': 'GND'}, False),
     ('U1', 'Regulator_Switching:LM2596S-ADJ', 'LM2596S-ADJ', 'Package_TO_SOT_SMD:TO-263-5_TabPin3',
      241.3, 63.5, 0, {'1': 'VIN_BUCK', '2': 'SW', '3': 'GND', '4': 'FB', '5': 'GND'}, False),
     ('D6', 'Device:D_Schottky', 'SS34', SMA, 266.7, 81.28, 0, {'1': 'SW', '2': 'GND'}, False),
-    ('L1', 'Device:L', '120uH', 'scaner:L_12x12mm_WidePads', 274.32, 58.42, 0, {'1': 'SW', '2': 'V5_BUCK'}, False),
+    # L1 — выводной в ферритовом чулке, 10 x 13,5 мм, шаг 5, маркировка 101 (замер 100 мкГн), стоит сверху
+    ('L1', 'Device:L', '100uH', 'Inductor_THT:L_Radial_D10.0mm_P5.00mm_Fastron_07P', 274.32, 58.42, 0, {'1': 'SW', '2': 'V5_BUCK'}, False),
     ('C3', 'Device:C_Polarized', '220u/25V', CP8, 284.48, 71.12, 0, {'1': 'V5_BUCK', '2': 'GND'}, False),
     ('C4', 'Device:C', '100n', C0805, 299.72, 71.12, 0, {'1': 'V5_BUCK', '2': 'GND'}, False),
     ('R3', 'Device:R', '3k0', R0805, 314.96, 63.5, 0, {'1': 'V5_BUCK', '2': 'FB'}, False),
@@ -199,26 +206,19 @@ PARTS = [
     ('U4', 'scaner:XIAO_ESP32C5', 'XIAO_ESP32C5', 'scaner:XIAO_ESP32C5_Socket', 76.2, 172.72, 0,
      {'1': 'VBAT_ADC', '2': 'CANB_TX', '6': 'RS_B', '8': 'CANA_RX', '9': 'CANA_TX', '10': 'RS_A',
       '11': 'CANB_RX', '12': '+3V3', '13': 'GND', '14': 'V5'}, False),
-    ('R11', 'Device:R', '10k', R0805, 152.4, 160.02, 0, {'1': '+3V3', '2': 'RS_A'}, False),
+    ('R11', 'Device:R', '12k', R0805, 152.4, 160.02, 0, {'1': '+3V3', '2': 'RS_A'}, False),
     ('R12', 'Device:R', '10k', R0805, 165.1, 160.02, 0, {'1': '+3V3', '2': 'RS_B'}, False),
     # 4. CAN
     ('U2', 'Interface_CAN_LIN:SN65HVD230', 'SN65HVD230', 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm',
      228.6, 162.56, 0, {'1': 'CANA_TX', '2': 'GND', '3': '+3V3', '4': 'CANA_RX', '6': 'CANA_L', '7': 'CANA_H', '8': 'RS_A'}, False),
     ('C6', 'Device:C', '100n', C0805, 190.5, 162.56, 0, {'1': '+3V3', '2': 'GND'}, False),
-    ('R7', 'Device:R', '120', R0805, 266.7, 160.02, 0, {'1': 'CANA_H', '2': 'TERM_A'}, False),
-    ('JP2', 'Jumper:SolderJumper_2_Open', 'TERM_A', SJ, 281.94, 170.18, 0, {'1': 'TERM_A', '2': 'CANA_L'}, False),
+    ('R7', 'Device:R', '120', R0805, 266.7, 160.02, 0, {'1': 'CANA_H', '2': 'CANA_L'}, True),    # DNP: по замеру
     ('J2', 'Connector_Generic:Conn_01x04', 'OBD 14 6 8 3', 'Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical',
      317.5, 182.88, 0, {'1': 'CANA_L', '2': 'CANA_H', '3': 'CANB_L', '4': 'CANB_H'}, False),
     ('U3', 'Interface_CAN_LIN:SN65HVD230', 'SN65HVD230', 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm',
      228.6, 203.2, 0, {'1': 'CANB_TX', '2': 'GND', '3': '+3V3', '4': 'CANB_RX', '6': 'CANB_L', '7': 'CANB_H', '8': 'RS_B'}, False),
     ('C7', 'Device:C', '100n', C0805, 190.5, 203.2, 0, {'1': '+3V3', '2': 'GND'}, False),
-    ('R8', 'Device:R', '120', R0805, 266.7, 200.66, 0, {'1': 'CANB_H', '2': 'TERM_B'}, False),
-    ('JP3', 'Jumper:SolderJumper_2_Open', 'TERM_B', SJ, 281.94, 210.82, 0, {'1': 'TERM_B', '2': 'CANB_L'}, False),
-    # механика
-    ('H1', 'Mechanical:MountingHole', 'M3', 'MountingHole:MountingHole_3.2mm_M3', 320.04, 162.56, 0, {}, False),
-    ('H2', 'Mechanical:MountingHole', 'M3', 'MountingHole:MountingHole_3.2mm_M3', 335.28, 162.56, 0, {}, False),
-    ('H3', 'Mechanical:MountingHole', 'M3', 'MountingHole:MountingHole_3.2mm_M3', 350.52, 162.56, 0, {}, False),
-    ('H4', 'Mechanical:MountingHole', 'M3', 'MountingHole:MountingHole_3.2mm_M3', 365.76, 162.56, 0, {}, False),
+    ('R8', 'Device:R', '120', R0805, 266.7, 200.66, 0, {'1': 'CANB_H', '2': 'CANB_L'}, False),   # стоит: на C3 II 3–8 = 128 Ом
 ]
 FLAGS = [('GND', 330.2, 190.5), ('VIN_BUCK', 345.44, 190.5), ('V5', 360.68, 190.5)]
 
@@ -229,14 +229,13 @@ TEXTS = [
     (190.5, 142.24, 2.0, '4. CAN: канал A — OBD 6/14, канал B — OBD 3/8 (Diag-on-CAN PSA)'),
     (20.32, 107.95, 1.27, 'Провода от выводов разъёма OBD: J1 1 = OBD16 (+12 В), 2 = OBD4, 3 = OBD5; J2 (у трансиверов) 1 = OBD14, 2 = OBD6, 3 = OBD8, 4 = OBD3'),
     (20.32, 111.76, 1.27, 'Повторитель Q1 ограничивает вход LM2596 ~26,5 В (IRFB4110 держит до 100 В)'),
-    (20.32, 115.57, 1.27, 'JP1 замкнуть, только если Q1, D3–D5, R1, R2 не установлены (вариант без повторителя)'),
-    (20.32, 119.38, 1.27, 'R1 и R9 — корпус 1206: на них бывают десятки вольт. VBAT_ADC: 12 В -> ~1,4 В на D0'),
+    (20.32, 115.57, 1.27, 'R1 и R9 — корпус 1206: на них бывают десятки вольт. VBAT_ADC: 12 В -> ~1,4 В на D0'),
     (190.5, 107.95, 1.27, 'Uвых = 1,23 x (1 + R3/R4) = 4,92 В; после D7 ~4,6 В — ниже USB, обратно в ноутбук не пойдёт'),
     (190.5, 111.76, 1.27, 'D8 1.5KE6.8CA — страховка: при пробое LM2596 зажимает линию 5V, сгорает F1'),
-    (20.32, 233.68, 1.27, 'Не занимать: D2, D3 (strapping), D6 (лог загрузки). Свободна D4'),
+    (20.32, 233.68, 1.27, 'D2, D3 (strapping), D4, D6 (лог загрузки) не подключены: пятаков нет, ножки гнезда выкусить'),
     (20.32, 237.49, 1.27, 'Посадочное место XIAO — проверить по живой плате (ряды через 15,24 мм)'),
     (190.5, 233.68, 1.27, 'U2/U3 — SN65HVD230, выпаянные с модулей Waveshare. Rs: 1 (подтяжка) = только слушать, передатчик выключен; прошивка опускает в 0'),
-    (190.5, 237.49, 1.27, 'JP2/JP3 — терминаторы 120 Ом, по умолчанию разомкнуты. Канал B по замеру: между OBD 3 и 8 ~120 Ом -> замкнуть JP3'),
+    (190.5, 237.49, 1.27, 'R7/R8 — терминаторы 120 Ом, ставим по замеру H–L на машине: ~60 Ом -> не паять, ~120 Ом -> паять. C3 II: 6–14 = 57 Ом (R7 не ставим), 3–8 = 128 Ом (R8 стоит)'),
 ]
 
 
@@ -274,7 +273,7 @@ def instance(lib_id, ref, value, fp, x, y, rot, pin_nums, dnp=False, ds='', hide
     pins = ' '.join(f'(pin "{n}" (uuid "{uid()}"))' for n in pin_nums)
     return (f'(symbol (lib_id "{lib_id}") (at {f(x)} {f(y)} {rot}) (unit 1) '
             f'(exclude_from_sim no) (in_bom {"no" if hide_ref else "yes"}) (on_board {"no" if hide_ref else "yes"}) '
-            f'(dnp {"yes" if dnp else "no"}) (uuid "{uid()}") '
+            f'(dnp {"yes" if dnp else "no"}) (uuid "{sym_uid(ref)}") '
             + prop('Reference', ref, rx, ry, hide=hide_ref, justify=rj) + ' '
             + prop('Value', value, vx, vy, hide=hide_value, justify=vj) + ' '
             + prop('Footprint', fp, x, y, hide=True) + ' '
@@ -311,7 +310,7 @@ def gnd_symbol(x, y, ox, oy):
 def main():
     libs = {lib: load_lib(os.path.join(KICAD_SYM, lib + '.kicad_sym'))
             for lib in ('Device', 'Connector_Generic', 'Regulator_Switching', 'Transistor_FET',
-                        'Jumper', 'Mechanical', 'power', 'Interface_CAN_LIN')}
+                        'power', 'Interface_CAN_LIN')}
     used = sorted({p[1] for p in PARTS} | {'power:GND', 'power:PWR_FLAG'})
     lib_syms = {lid: flatten(libs, lid) for lid in used}
 
@@ -364,7 +363,7 @@ def main():
         with open(pro, 'w', encoding='utf-8') as fh:
             json.dump({'meta': {'filename': f'{NAME}.kicad_pro', 'version': 3}}, fh, indent=2)
     write_xiao_footprint()
-    write_inductor_footprint()
+    write_zener_footprint()
     with open(os.path.join(HERE, 'expected_nets.json'), 'w', encoding='utf-8') as fh:
         json.dump({k: sorted(v) for k, v in sorted(expected.items())}, fh, ensure_ascii=False, indent=1)
     print(f'ok: {len(PARTS)} деталей, {len(expected)} цепей')
@@ -373,15 +372,16 @@ def main():
 def write_xiao_footprint():
     """Две панельки 1x7, шаг 2,54, ряды через 15,24 мм.
     Пады 1-7 — левый ряд сверху вниз (D0..D6), 8-14 — правый ряд снизу вверх (D7..5V).
-    USB-разъём XIAO — сверху. Проверить по живой плате!"""
-    pads = []
+    Под неподключёнными D2, D3, D4, D6 (выводы 3, 4, 5, 7) пятаков нет — место для дорожек;
+    эти ножки гнезда выкусываются. USB-разъём XIAO — сверху."""
+    pads, cut = [], []
     for i in range(7):
-        pads.append((str(i + 1), 0.0, 2.54 * i))
+        (cut if str(i + 1) in XIAO_NC else pads).append((str(i + 1), 0.0, 2.54 * i))
         pads.append((str(8 + i), 15.24, 2.54 * (6 - i)))
     lines = [
         '(footprint "XIAO_ESP32C5_Socket"',
         '  (version 20241229) (generator "scaner_gen") (layer "F.Cu")',
-        '  (descr "Seeed XIAO ESP32-C5 на двух панельках 1x7, шаг 2,54, ряды через 15,24 мм. Проверить по живой плате!")',
+        '  (descr "Seeed XIAO ESP32-C5 на двух панельках 1x7, шаг 2,54, ряды через 15,24 мм; без пятаков под D2, D3, D4, D6")',
         '  (tags "XIAO ESP32C5 socket")',
         f'  (property "Reference" "REF**" (at 7.62 -5 0) (layer "F.SilkS") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
         f'  (property "Value" "XIAO_ESP32C5_Socket" (at 7.62 19.5 0) (layer "F.Fab") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
@@ -394,6 +394,9 @@ def write_xiao_footprint():
         shape = 'rect' if num == '1' else 'circle'
         lines.append(f'  (pad "{num}" thru_hole {shape} (at {f(x)} {f(y)}) (size 2 2) (drill 1) '
                      f'(layers "*.Cu" "*.Mask") (uuid "{uid()}"))')
+    for num, x, y in cut:   # где была ножка — кружок на F.Fab, чтобы видеть шаг гнезда
+        lines.append(f'  (fp_circle (center {f(x)} {f(y)}) (end {f(x + 0.5)} {f(y)}) (stroke (width 0.1) (type solid)) '
+                     f'(fill no) (layer "F.Fab") (uuid "{uid()}"))')
     lines.append('  (model "${KIPRJMOD}/scaner.3dshapes/XIAO_ESP32C5_on_sockets.wrl" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))')
     lines.append(')')
     with open(os.path.join(PRJ, 'scaner.pretty', 'XIAO_ESP32C5_Socket.kicad_mod'), 'w',
@@ -401,29 +404,37 @@ def write_xiao_footprint():
         fh.write('\n'.join(lines) + '\n')
 
 
-def write_inductor_footprint():
-    """Дроссель 12x12 мм под живую деталь: выводы — две пластины почти во всё дно, между ними 2 мм.
-    Площадки выходят за корпус на 0,6 мм — туда подходят дорожки и туда греть паяльником.
-    Земли под корпусом нет: запретную зону ставит gen_pcb.py."""
+def write_zener_footprint():
+    """Стеклянный стабилитрон DO-35 лёжа, шаг 5,08 (в библиотеке KiCad лёжа — от 7,62).
+    Корпус 3,5 x 1,9 мм: ноги гнуть почти у самой стекляшки, пятаки 2 мм, засверловка 0,6.
+    Вывод 1 — катод (полоска), как в библиотеке."""
     lines = [
-        '(footprint "L_12x12mm_WidePads"',
+        '(footprint "D_DO-35_P5.08mm_Horizontal"',
         '  (version 20241229) (generator "scaner_gen") (layer "F.Cu")',
-        '  (descr "Дроссель 12x12 мм: две площадки 5,6 x 11,2 мм, зазор 2 мм (по живой детали)")',
-        '  (tags "inductor 12x12 SMD")',
-        f'  (property "Reference" "REF**" (at 0 -7.6 0) (layer "F.SilkS") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
-        f'  (property "Value" "L_12x12mm_WidePads" (at 0 7.6 0) (layer "F.Fab") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
-        '  (attr smd)',
-        f'  (fp_rect (start -6 -6) (end 6 6) (stroke (width 0.1) (type solid)) (fill no) (layer "F.Fab") (uuid "{uid()}"))',
-        f'  (fp_rect (start -6.85 -6.35) (end 6.85 6.35) (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd") (uuid "{uid()}"))',
-        f'  (fp_line (start -6 -6.2) (end 6 -6.2) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "{uid()}"))',
-        f'  (fp_line (start -6 6.2) (end 6 6.2) (stroke (width 0.12) (type solid)) (layer "F.SilkS") (uuid "{uid()}"))',
+        '  (descr "Стабилитрон DO-35 лёжа, шаг 5,08 мм, корпус 3,5 x 1,9 мм; пятаки 2 мм")',
+        '  (tags "Diode DO-35 Axial Horizontal pitch 5.08mm")',
+        f'  (property "Reference" "REF**" (at 2.54 -2.2 0) (layer "F.SilkS") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
+        f'  (property "Value" "D_DO-35_P5.08mm_Horizontal" (at 2.54 2.2 0) (layer "F.Fab") (uuid "{uid()}") (effects (font (size 1 1) (thickness 0.15))))',
+        '  (attr through_hole)',
+        f'  (fp_rect (start 0.79 -0.95) (end 4.29 0.95) (stroke (width 0.1) (type solid)) (fill no) (layer "F.Fab") (uuid "{uid()}"))',
+        f'  (fp_rect (start 1.15 -0.95) (end 1.55 0.95) (stroke (width 0.1) (type solid)) (fill yes) (layer "F.Fab") (uuid "{uid()}"))',
+        f'  (fp_line (start 0 0) (end 0.79 0) (stroke (width 0.1) (type solid)) (layer "F.Fab") (uuid "{uid()}"))',
+        f'  (fp_line (start 4.29 0) (end 5.08 0) (stroke (width 0.1) (type solid)) (layer "F.Fab") (uuid "{uid()}"))',
+        f'  (fp_rect (start -1.25 -1.25) (end 6.33 1.25) (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd") (uuid "{uid()}"))',
     ]
-    for num, x in (('1', -3.8), ('2', 3.8)):   # как в библиотеке KiCad: вывод 1 слева
-        lines.append(f'  (pad "{num}" smd rect (at {f(x)} 0) (size 5.6 11.2) '
-                     f'(layers "F.Cu" "F.Paste" "F.Mask") (uuid "{uid()}"))')
-    lines.append('  (model "${KIPRJMOD}/scaner.3dshapes/L_12x12mm_WidePads.wrl" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))')
+    # шелкография — только между пятаками: две стороны корпуса и полоска катода
+    for y in (-1.1, 1.1):
+        lines.append(f'  (fp_line (start 1.2 {f(y)}) (end 3.88 {f(y)}) (stroke (width 0.12) (type solid)) '
+                     f'(layer "F.SilkS") (uuid "{uid()}"))')
+    for x in (1.3, 1.42, 1.54):
+        lines.append(f'  (fp_line (start {f(x)} -1.1) (end {f(x)} 1.1) (stroke (width 0.12) (type solid)) '
+                     f'(layer "F.SilkS") (uuid "{uid()}"))')
+    lines.append(f'  (pad "1" thru_hole roundrect (at 0 0) (size 2 2) (drill 0.6) (layers "*.Cu" "*.Mask") '
+                 f'(roundrect_rratio 0.15625) (uuid "{uid()}"))')
+    lines.append(f'  (pad "2" thru_hole circle (at 5.08 0) (size 2 2) (drill 0.6) (layers "*.Cu" "*.Mask") (uuid "{uid()}"))')
+    lines.append('  (model "${KIPRJMOD}/scaner.3dshapes/D_DO-35_P5.08mm_Horizontal.wrl" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))')
     lines.append(')')
-    with open(os.path.join(PRJ, 'scaner.pretty', 'L_12x12mm_WidePads.kicad_mod'), 'w',
+    with open(os.path.join(PRJ, 'scaner.pretty', 'D_DO-35_P5.08mm_Horizontal.kicad_mod'), 'w',
               encoding='utf-8', newline='\n') as fh:
         fh.write('\n'.join(lines) + '\n')
 
