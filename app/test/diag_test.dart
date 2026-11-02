@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:scaner_app/kb/bits.dart';
 import 'package:scaner_app/kb/knowledge_base.dart';
 import 'package:scaner_app/state/diag_service.dart';
+import 'package:scaner_app/state/garage.dart';
+import 'package:scaner_app/state/scan_store.dart';
 import 'package:scaner_app/transport/adapter_client.dart';
 import 'package:scaner_app/transport/diag.dart';
 
@@ -68,6 +71,56 @@ void main() {
     expect(kb.psaDtc([0x54, 0xC0], 'C14C0', 'ru', saeP: false), isNull);  // 5 — не тип PSA
     expect(kb.ecus.firstWhere((e) => e.node == 'CMM').saeP, isTrue);
     expect(kb.ecus.firstWhere((e) => e.node == 'BSI').saeP, isFalse);
+  });
+
+  test('сканы: сохраняются с ошибками, хранятся 10 последних, блок пересканируется отдельно', () async {
+    final dir = Directory.systemTemp.createTempSync('scans');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final store = ScanStore(base: () async => dir);
+    SavedScan scan(int i) => SavedScan(id: '$i', time: DateTime(2026, 11, 1).add(Duration(hours: i)), batteryMv: 12600, ecus: [
+          SavedEcu(tx: 0x752, answered: true, time: DateTime(2026, 11, 1), model: 'BSI', dtcs: [Dtc([0xA4, 0xC0], 0xF5, active: true)]),
+          SavedEcu(tx: 0x6A8, answered: false, time: DateTime(2026, 11, 1)),
+        ]);
+    for (var i = 0; i < 12; i++) {
+      await store.save('car', scan(i));
+    }
+    final list = await store.list('car');
+    expect(list.map((s) => s.id), [for (var i = 11; i >= 2; i--) '$i']); // новые первыми, два старых ушли
+    final s = list.first;
+    expect(s.faults, 1);
+    expect(s.ecu(0x752)!.dtcs.single.psa, 'A4C0');
+    expect(s.ecu(0x752)!.dtcs.single.active, isTrue);
+    expect(s.batteryMv, 12600);
+
+    // пересканировали BSI — ошибки нет; остальное из прошлого скана, сам скан новый
+    final again = s.withEcu(SavedEcu(tx: 0x752, answered: true, time: DateTime(2026, 11, 2), model: 'BSI'),
+        module: 'BSI', batteryMv: 14100, fw: 'sim');
+    expect(again.id, isNot(s.id));
+    expect(again.module, 'BSI');
+    expect(again.faults, 0);
+    expect(again.ecu(0x6A8)!.answered, isFalse);
+    expect(s.faults, 1); // прошлый скан не тронут
+    expect(isSimulatorVin('VF7SIMULATORC3001'), isTrue);
+    expect(isSimulatorVin('VF7AAAAAAAA000000'), isFalse);
+  });
+
+  test('гараж: удаляется любая машина, пустой гараж, первый VIN даёт имя', () async {
+    SharedPreferences.setMockInitialValues({});
+    final g = Garage(await SharedPreferences.getInstance());
+    expect(g.real, isEmpty); // новый телефон — пустой гараж
+    g.onVin('VF7AAAAAAB0000000'); // 10-й знак «B» — 2011
+    expect(g.real.single.name, 'Citroën');
+    expect(g.real.single.sub, '2011');
+    g.onVin('VF3AAAAAAC0000000'); // другая машина — новая запись
+    expect(g.real.length, 2);
+    g.remove(g.current.id);
+    g.remove(g.real.single.id); // и последнюю тоже
+    expect(g.real, isEmpty);
+    expect(g.current.blank, isTrue);
+    g.onVin('VF7SIMULATORC3001'); // симулятор не занимает пустую заготовку
+    expect(g.real.single.vin, 'VF7SIMULATORC3001');
+    g.clear();
+    expect(g.real, isEmpty);
   });
 
   test('биты в нотации PSA-RE', () {

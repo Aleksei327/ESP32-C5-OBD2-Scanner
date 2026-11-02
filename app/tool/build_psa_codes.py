@@ -5,16 +5,19 @@
 в репозиторий не идут: файл assets/kb/psa_codes.json и переводы в tool/.cache/ — только локально
 (.gitignore), приложение работает и без них.
 
-    python tool/build_psa_codes.py <psa.pdf> --dump   # пронумерованные тексты для перевода в tool/.cache/
     python tool/build_psa_codes.py <psa.pdf>          # собрать assets/kb/psa_codes.json
+    python tool/build_psa_codes.py <psa.pdf> export   # непереведённое — пачками в tool/.cache/psa_tr/
+    # перевести: ru_001.txt, en_001.txt … рядом с fr_ru_001.txt, fr_en_001.txt (номер<TAB>перевод)
+    python tool/build_psa_codes.py <psa.pdf> merge    # влить переводы в tool/.cache/psa_tr.json
 
-Переводы: tool/.cache/psa_ru_desc.txt и psa_ru_check.txt, строки «номер<TAB>перевод» —
-номера из psa_fr_desc.txt / psa_fr_check.txt, которые пишет --dump.
+Переводы хранятся по французскому тексту: {текст: {ru, en}} — разбор PDF можно менять, готовые
+переводы не теряются. У P-кодов название — английское по SAE: русский к нему берётся из общих
+текстов SAE базы знаний (assets/kb/c3_ii.json), переводить надо только пояснения PSA.
 
 Код PSA на KWP — два байта: первая шестнадцатеричная цифра — тип неисправности (7…F), остальные
 три — номер (BSI 0x400–0x5FF, климат 0x700–0x7FF, датчик АКБ 0xFF0–0xFFE…). Номер без типа — 0.
-P-коды двигателя записаны отдельно: название по SAE и пояснение PSA.
 """
+import glob
 import json
 import os
 import re
@@ -24,7 +27,11 @@ import fitz   # PyMuPDF
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, '.cache')
+TR = os.path.join(CACHE, 'psa_tr.json')
+TR_DIR = os.path.join(CACHE, 'psa_tr')
 OUT = os.path.join(HERE, '..', 'assets', 'kb', 'psa_codes.json')
+KB = os.path.join(HERE, '..', 'assets', 'kb', 'c3_ii.json')
+BATCH = 200
 
 CODE = re.compile(r'^(P[0-9A-F]{4}|[0-9A-F]{3,4})$')
 TYPES = {
@@ -40,17 +47,26 @@ TYPES = {
 }
 SUFFIX = re.compile(r'\s*\((' + '|'.join(re.escape(v[0]) for v in TYPES.values()) + r')\)\s*$')
 SECTION = re.compile(r'CODES\s+([A-Z][A-Z0-9 ]*?),\s*0[xX]([0-9A-F]{3})\s*à\s*0[xX]([0-9A-F]{3})\b')
-# Чей раздел номеров — по-русски, где понятно (сокращения — PSA)
-SECTION_RU = {
-    'AAS': 'парктроник', 'AS': 'парктроник', 'ADDGO': 'присадка сажевого фильтра', 'ADGO': 'присадка сажевого фильтра',
-    'ALARME': 'сигнализация', 'BECB': 'датчик состояния АКБ', 'BSI': 'BSI', 'BSM': 'блок моторного отсека',
-    'BTEL': 'мультимедиа', 'CDC': 'CD-чейнджер', 'CDPL': 'датчик дождя и света', 'CLIM': 'климат',
-    'CMB': 'щиток приборов', 'COMMUNICATION': 'связь по сети', 'COMMUN AUTRE': 'прочая связь',
-    'HDC': 'подрулевые переключатели', 'HIFI': 'HiFi-усилитель', 'KML': 'громкая связь / USB',
-    'MAE': 'модуль автошколы', 'RADIO': 'магнитола', 'RBG': 'подушки безопасности', 'TO': 'люк',
-    'LVEAP AVG': 'стеклоподъёмник передний левый', 'LVEAP AVD': 'стеклоподъёмник передний правый',
-    'LVEAP ARG': 'стеклоподъёмник задний левый', 'LVEAP ARD': 'стеклоподъёмник задний правый',
+# Чей раздел номеров — где понятно (сокращения — PSA): русский, английский
+SECTION_NAMES = {
+    'AAS': ('парктроник', 'parking sensors'), 'AS': ('парктроник', 'parking sensors'),
+    'ADDGO': ('присадка сажевого фильтра', 'DPF additive'), 'ADGO': ('присадка сажевого фильтра', 'DPF additive'),
+    'ALARME': ('сигнализация', 'alarm'), 'BECB': ('датчик состояния АКБ', 'battery sensor'), 'BSI': ('BSI', 'BSI'),
+    'BSM': ('блок моторного отсека', 'engine bay fuse box'), 'BTEL': ('мультимедиа', 'telematics'),
+    'CDC': ('CD-чейнджер', 'CD changer'), 'CDPL': ('датчик дождя и света', 'rain and light sensor'),
+    'CLIM': ('климат', 'climate'), 'CMB': ('щиток приборов', 'instrument cluster'),
+    'COMMUNICATION': ('связь по сети', 'network communication'), 'COMMUN AUTRE': ('прочая связь', 'other communication'),
+    'HDC': ('подрулевые переключатели', 'steering column switches'), 'HIFI': ('HiFi-усилитель', 'HiFi amplifier'),
+    'KML': ('громкая связь / USB', 'hands-free / USB'), 'MAE': ('модуль автошколы', 'driving school module'),
+    'RADIO': ('магнитола', 'radio'), 'RBG': ('подушки безопасности', 'airbags'), 'TO': ('люк', 'sunroof'),
+    'LVEAP AVG': ('стеклоподъёмник передний левый', 'front left window'),
+    'LVEAP AVD': ('стеклоподъёмник передний правый', 'front right window'),
+    'LVEAP ARG': ('стеклоподъёмник задний левый', 'rear left window'),
+    'LVEAP ARD': ('стеклоподъёмник задний правый', 'rear right window'),
 }
+# Шапка таблицы и заголовки разделов — не текст кода
+NOISE = re.compile(r'^(CODE|SIGNIFICATION|A VERIFIER.*|CO, Pb alimentation\)|\d+(\.\d+)+|\. CODES .*)$')
+TOL = 3.0   # текст в колонке начинается на долю пункта выше строки своего кода
 
 
 def sections(pdf):
@@ -64,7 +80,11 @@ def sections(pdf):
 
 
 def parse(pdf):
-    """→ {код: (описание, что проверить)} в порядке документа."""
+    """→ {код: (описание, что проверить)} в порядке документа.
+
+    Строка текста принадлежит тому коду, чья строка таблицы начинается не ниже неё (с допуском
+    [TOL]): так «проверить» не съезжает к соседнему коду. Код, который уже был, второй раз не берём.
+    """
     doc = fitz.open(pdf)
     codes = {}
     for pno in range(doc.page_count):
@@ -76,20 +96,28 @@ def parse(pdf):
                 if t and 50 < y0 < 760:        # без шапки и подвала страницы
                     lines.append((round(y0, 1), x0, x1, t))
         lines.sort()
-        cur = None
-        for _, x0, x1, t in lines:
+        rows = []                              # (y, запись или None — повтор)
+        for y, x0, x1, t in lines:
             if x1 < 92 and CODE.match(t):
-                cur = None if t in codes else {'desc': [], 'check': []}
-                if cur is not None:
-                    codes[t] = cur
+                e = None if t in codes else {'desc': [], 'check': []}
+                if e is not None:
+                    codes[t] = e
+                rows.append((y, e))
+        for y, x0, x1, t in lines:
+            if (x1 < 92 and CODE.match(t)) or NOISE.match(t):
                 continue
-            if cur is None or t in ('CODE', 'SIGNIFICATION'):
+            owner = None
+            for ry, e in rows:
+                if ry > y + TOL:
+                    break
+                owner = e
+            if owner is None:
                 continue
             if x0 < 300:
-                if t not in cur['desc']:        # у P-кодов название повторено второй строкой
-                    cur['desc'].append(t)
+                if t not in owner['desc']:     # у P-кодов название повторено второй строкой
+                    owner['desc'].append(t)
             elif x0 > 380:
-                cur['check'].append(t)
+                owner['check'].append(t)
     out = {}
     for c, e in codes.items():
         desc = re.sub(r'\s+', ' ', ' '.join(e['desc'])).strip()
@@ -107,60 +135,152 @@ def split(code, desc):
     return code, '', desc
 
 
-def numbered(path):
-    with open(path, encoding='utf-8') as f:
-        return {int(a): b for a, b in (l.rstrip('\n').split('\t', 1) for l in f if '\t' in l)}
+STANDARD = re.compile(r'^P(0|2|3[4-9])')   # смысл кода задаёт сам SAE J2012
 
 
-def main():
-    pdf = sys.argv[1]
-    codes = parse(pdf)
-    descs, checks = {}, {}
-    for c, (d, ch) in codes.items():
-        if not c.startswith('P'):
-            descs.setdefault(split(c, d)[2], None)
-            if ch:
-                checks.setdefault(ch, None)
-    descs, checks = sorted(descs), sorted(checks)
+def sae_ru(code, base, generic):
+    """Русское название P-кода из общих текстов SAE, если у PSA тут английское название по SAE."""
+    g = generic.get(code)
+    if g and g.get('ru') and STANDARD.match(code) and is_english(base):
+        return g['ru']
+    return None
+
+
+FRENCH = re.compile(r"[àâçéèêëîïôûùœ]|\b(de|du|des|la|le|les|et|ou|sur|pour|au|aux|en|par|défaut|capteur|"
+                    r"circuit ouvert|tension|commande|moteur|vanne|sonde|entrée|sortie)\b", re.I)
+
+
+def is_english(s):
+    return not FRENCH.search(s)
+
+
+def load_tr():
+    """Переводы {французский текст: {ru, en}}; при первом запуске — из старых пронумерованных файлов."""
+    if os.path.exists(TR):
+        return json.load(open(TR, encoding='utf-8'))
+    tr = {}
+
+    def numbered(path):
+        with open(path, encoding='utf-8') as f:
+            return {int(a): b for a, b in (l.rstrip('\n').split('\t', 1) for l in f if '\t' in l)}
+
+    for kind in ('desc', 'check'):
+        fr_path, ru_path = (os.path.join(CACHE, f'psa_{lang}_{kind}.txt') for lang in ('fr', 'ru'))
+        if os.path.exists(fr_path) and os.path.exists(ru_path):
+            fr, ru = numbered(fr_path), numbered(ru_path)
+            for i, t in ru.items():
+                if i in fr:
+                    tr.setdefault(fr[i], {})['ru'] = t
+    return tr
+
+
+def save_tr(tr):
     os.makedirs(CACHE, exist_ok=True)
-    if '--dump' in sys.argv:
-        for name, items in (('psa_fr_desc.txt', descs), ('psa_fr_check.txt', checks)):
-            with open(os.path.join(CACHE, name), 'w', encoding='utf-8') as f:
-                f.writelines(f'{i}\t{x}\n' for i, x in enumerate(items))
-        print(f'кодов {len(codes)}, описаний {len(descs)}, «проверить» {len(checks)} → {CACHE}')
-        return
-    ru = {}
-    for fr_name, ru_name in (('psa_fr_desc.txt', 'psa_ru_desc.txt'), ('psa_fr_check.txt', 'psa_ru_check.txt')):
-        fr, tr = numbered(os.path.join(CACHE, fr_name)), {}
-        try:
-            tr = numbered(os.path.join(CACHE, ru_name))
-        except OSError:
-            pass
-        ru.update({fr[i]: t for i, t in tr.items() if i in fr})
+    with open(TR, 'w', encoding='utf-8', newline='\n') as f:
+        json.dump(dict(sorted(tr.items())), f, ensure_ascii=False, indent=0)
+
+
+def texts(codes, generic):
+    """Что нужно перевести: {французский текст: нужные языки}."""
+    need = {}
+    for c, (d, ch) in codes.items():
+        _, _, base = split(c, d)
+        if c.startswith('P'):
+            if sae_ru(c, base, generic):
+                pass                           # название SAE: русский есть в базе знаний
+            elif is_english(base):
+                need.setdefault(base, set()).add('ru')
+            else:
+                need.setdefault(base, set()).update(('ru', 'en'))
+        else:
+            need.setdefault(base, set()).update(('ru', 'en'))
+        if ch:
+            need.setdefault(ch, set()).update(('ru', 'en'))
+    return need
+
+
+def export(codes, generic, tr):
+    os.makedirs(TR_DIR, exist_ok=True)
+    for f in glob.glob(os.path.join(TR_DIR, 'fr_*.txt')):
+        os.remove(f)
+    for lang in ('ru', 'en'):
+        todo = sorted(t for t, langs in texts(codes, generic).items() if lang in langs and lang not in tr.get(t, {}))
+        for i in range(0, len(todo), BATCH):
+            with open(os.path.join(TR_DIR, f'fr_{lang}_{i // BATCH + 1:03d}.txt'), 'w', encoding='utf-8', newline='\n') as f:
+                f.writelines(f'{i + n}\t{t}\n' for n, t in enumerate(todo[i:i + BATCH]))
+        print(f'{lang}: {len(todo)} строк, {sum(map(len, todo))} знаков → {(len(todo) + BATCH - 1) // BATCH} пачек')
+
+
+def merge(tr):
+    added = 0
+    for src in sorted(glob.glob(os.path.join(TR_DIR, 'fr_*_*.txt'))):
+        lang, num = os.path.basename(src)[3:-4].split('_')
+        done = os.path.join(TR_DIR, f'{lang}_{num}.txt')
+        if not os.path.exists(done):
+            continue
+        fr = dict(l.rstrip('\n').split('\t', 1) for l in open(src, encoding='utf-8') if '\t' in l)
+        for l in open(done, encoding='utf-8'):
+            if '\t' in l:
+                n, t = l.rstrip('\n').split('\t', 1)
+                if n in fr and t.strip():
+                    tr.setdefault(fr[n], {})[lang] = t.strip()
+                    added += 1
+    save_tr(tr)
+    print(f'влито {added} переводов → {TR}')
+
+
+def build(pdf, codes, generic, tr):
     out = {'source': 'PSA STE «Liste codes diagnostic» 96.272.978.9A (03/14) — локальная копия, не публикуется',
            'types': {k: {'fr': v[0], 'ru': v[1], 'en': v[2]} for k, v in TYPES.items()},
-           'sections': [{'name': n, 'ru': SECTION_RU.get(n, n), 'lo': lo, 'hi': hi} for n, lo, hi in sections(pdf)],
+           'sections': [{'name': n, 'ru': SECTION_NAMES.get(n, (n, n))[0], 'en': SECTION_NAMES.get(n, (n, n))[1],
+                         'lo': lo, 'hi': hi} for n, lo, hi in sections(pdf)],
            'unknown': {'ru': 'Нет описания в списке PSA: раздел «{s}», номер {n}',
                        'en': 'No description in the PSA list: section "{s}", number {n}'},
            'codes': {}}
-    missing = 0
+    missing = {'ru': 0, 'en': 0}
     for c, (d, ch) in codes.items():
-        _, t, base = split(c, d)
+        _, _, base = split(c, d)
         e = {'fr': base}
         if any(f'({v[0]})' in base for v in TYPES.values()):
             e['typed'] = True                   # тип уже внутри текста — второй раз не дописывать
-        if base in ru:
-            e['ru'] = ru[base]
-        elif not c.startswith('P'):
-            missing += 1
+        ru = sae_ru(c, base, generic) if c.startswith('P') else None
+        if ru:
+            e['en'], e['ru'] = base, ru
+        else:
+            t = tr.get(base, {})
+            if c.startswith('P') and is_english(base):
+                e['en'] = base
+            for lang in ('ru', 'en'):
+                if lang in t:
+                    e[lang] = t[lang]
+                elif lang not in e:
+                    missing[lang] += 1
         if ch:
             e['check'] = ch
-            if ch in ru:
-                e['check_ru'] = ru[ch]
+            for lang in ('ru', 'en'):
+                if lang in tr.get(ch, {}):
+                    e[f'check_{lang}'] = tr[ch][lang]
         out['codes'][c] = e
     with open(OUT, 'w', encoding='utf-8') as f:
         json.dump(out, f, ensure_ascii=False, separators=(',', ':'))
-    print(f'{OUT}: {len(out["codes"])} кодов, без перевода {missing}')
+    print(f'{OUT}: {len(out["codes"])} кодов, без перевода: ru {missing["ru"]}, en {missing["en"]}')
+
+
+def main():
+    fitz.TOOLS.mupdf_display_errors(False)    # у файла битый хвост xref, текст читается
+    pdf = sys.argv[1]
+    cmd = sys.argv[2] if len(sys.argv) > 2 else 'build'
+    codes = parse(pdf)
+    generic = json.load(open(KB, encoding='utf-8')).get('dtc_generic', {})
+    tr = load_tr()
+    if not os.path.exists(TR):
+        save_tr(tr)                           # перенесли старые переводы — дальше только этот файл
+    if cmd == 'export':
+        export(codes, generic, tr)
+    elif cmd == 'merge':
+        merge(tr)
+    else:
+        build(pdf, codes, generic, tr)
 
 
 if __name__ == '__main__':

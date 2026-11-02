@@ -29,7 +29,7 @@ class KnowledgeBase {
     return kb;
   }
 
-  /// Коды PSA: {types: {A: {ru, en, fr}}, codes: {«4C0» | «A4C0» | «P1109»: {ru, fr, check, check_ru, typed}}}.
+  /// Коды PSA: {types: {A: {ru, en, fr}}, codes: {«4C0» | «A4C0» | «P1109»: {fr, ru, en, check, check_ru, check_en, typed}}}.
   Map<String, dynamic> psa = const {};
 
   /// Текст кода по списку PSA. На KWP код — 2 байта: первая цифра — тип неисправности
@@ -63,14 +63,15 @@ class KnowledgeBase {
       final n = int.parse(num, radix: 16);
       for (final s in (psa['sections'] as List? ?? const [])) {
         if (n >= int.parse(s['lo'] as String, radix: 16) && n <= int.parse(s['hi'] as String, radix: 16)) {
-          final name = (lang == 'ru' ? s['ru'] : s['name']) as String;
+          final name = (lang == 'ru' ? s['ru'] : s['en'] ?? s['name']) as String;
           return (text: withType(txt(psa['unknown'], lang).replaceAll('{s}', name).replaceAll('{n}', num)), check: null);
         }
       }
       return null;
     }
-    final base = (lang == 'ru' ? e['ru'] ?? e['fr'] : e['fr']) as String;
-    final check = (lang == 'ru' ? e['check_ru'] ?? e['check'] : e['check']) as String?;
+    // нет перевода на язык интерфейса — французский оригинал
+    final base = (e[lang] ?? e['fr']) as String;
+    final check = (e['check_$lang'] ?? e['check']) as String?;
     return (text: withType(base), check: check);
   }
 
@@ -143,6 +144,9 @@ class EcuDef {
       models.any((x) => (x.m['dtc'] as Map?)?.keys.any((k) => '$k'.startsWith('P')) ?? false);
 
   late final List<EcuModel> models = [for (final x in (m['models'] as List? ?? [])) EcuModel(x as Map<String, dynamic>)];
+
+  /// Модель по имени (из сохранённого скана).
+  EcuModel? modelNamed(String? name) => name == null ? null : models.where((x) => x.name == name).firstOrNull;
 
   /// Протоколы, на которых может говорить этот блок: сначала самый частый у моделей.
   List<String> get protos {

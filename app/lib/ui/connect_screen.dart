@@ -130,6 +130,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   ? Text(t.connecting)
                   : Text(t.connect, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             ),
+            const SizedBox(height: 12),
+            // без адаптера: гараж и сохранённые сканы
+            TextButton.icon(
+              onPressed: app.connecting ? null : app.openOffline,
+              icon: const Icon(Icons.history),
+              label: Text(t.openOffline),
+            ),
           ],
         ),
       ),

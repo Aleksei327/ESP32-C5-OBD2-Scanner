@@ -75,7 +75,7 @@ class ScanerApp extends StatelessWidget {
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           theme: buildTheme(state.theme),
-          home: state.connected ? const HomeShell() : const ConnectScreen(),
+          home: state.connected || state.offline ? const HomeShell() : const ConnectScreen(),
         ),
       ),
     );
@@ -111,7 +111,14 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
-    final pages = const [CarScreen(), ScanScreen(), GaugesScreen(), BusScreen()];
+    // датчики и шина — только вживую; без адаптера на их месте просьба подключить
+    final live = AppScope.of(context).live;
+    final pages = [
+      const CarScreen(),
+      const ScanScreen(),
+      live ? const GaugesScreen() : const NeedAdapter(),
+      live ? const BusScreen() : const NeedAdapter(),
+    ];
     return Scaffold(
       // Строим только открытую вкладку: каждая сама открывает нужную ей шину,
       // и они не должны работать одновременно (скан и монитор делят шину B).
@@ -131,6 +138,36 @@ class _HomeShellState extends State<HomeShell> {
           NavItem(Icons.speed_rounded, t.navGauges, const Color(0xFFF59E0B)),
           NavItem(Icons.lan_rounded, t.navBus, const Color(0xFF06B6D4)),
         ],
+      ),
+    );
+  }
+}
+
+/// Вкладка, которой нужна живая связь, а адаптер не подключён.
+class NeedAdapter extends StatelessWidget {
+  const NeedAdapter({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final p = context.p;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.link_off, size: 40, color: p.textDim),
+          const SizedBox(height: 12),
+          Text(t.needAdapter, textAlign: TextAlign.center, style: TextStyle(color: p.textDim)),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () {
+              AppScope.read(context).leaveOffline();
+              Navigator.of(context).popUntil((r) => r.isFirst);
+            },
+            icon: const Icon(Icons.wifi_tethering),
+            label: Text(t.connect),
+          ),
+        ]),
       ),
     );
   }

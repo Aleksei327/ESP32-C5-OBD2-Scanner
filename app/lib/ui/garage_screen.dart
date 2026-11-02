@@ -49,8 +49,7 @@ class _GarageScreenState extends State<GarageScreen> {
           TextField(controller: sub, decoration: InputDecoration(labelText: t.carSub)),
         ]),
         actions: [
-          if (app.garage.cars.length > 1)
-            TextButton(onPressed: () => Navigator.pop(d, 'delete'), child: Text(t.deleteCar, style: TextStyle(color: d.p.bad))),
+          TextButton(onPressed: () => Navigator.pop(d, 'delete'), child: Text(t.deleteCar, style: TextStyle(color: d.p.bad))),
           TextButton(onPressed: () => Navigator.pop(d), child: Text(t.cancel)),
           FilledButton(onPressed: () => Navigator.pop(d, 'save'), child: Text(t.save)),
         ],
@@ -79,19 +78,55 @@ class _GarageScreenState extends State<GarageScreen> {
     }
   }
 
+  /// Удалить все машины вместе с их фото и сканами.
+  Future<void> _deleteAll() async {
+    final t = AppLocalizations.of(context);
+    final app = AppScope.read(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        content: Text(t.deleteAllConfirm),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(t.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: Text(t.deleteAll)),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    for (final f in _photos.values.expand((x) => x)) {
+      await _store.remove(f);
+    }
+    _photos.clear();
+    app.removeAllCars();
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final t = AppLocalizations.of(context);
     final p = context.p;
+    final cars = app.garage.real.toList();
     return Scaffold(
-      appBar: AppBar(backgroundColor: p.bg, title: Text(t.garage)),
+      appBar: AppBar(
+        backgroundColor: p.bg,
+        title: Text(t.garage),
+        actions: [
+          if (cars.isNotEmpty)
+            IconButton(tooltip: t.deleteAll, onPressed: _deleteAll, icon: Icon(Icons.delete_sweep_outlined, color: p.bad)),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         children: [
           Text(t.garageSub, style: TextStyle(color: p.textDim)),
           const SizedBox(height: 14),
-          for (final c in app.garage.cars) ...[
+          if (cars.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Text(t.garageEmpty, style: TextStyle(color: p.text)),
+            ),
+          for (final c in cars) ...[
             _card(context, c, c.id == app.garage.currentId),
             const SizedBox(height: 12),
           ],

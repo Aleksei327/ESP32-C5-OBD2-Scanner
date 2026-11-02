@@ -10,6 +10,7 @@ import '../transport/adapter_client.dart';
 import '../transport/net.dart';
 import 'diag_service.dart';
 import 'garage.dart';
+import 'scan_store.dart';
 
 /// Глобальное состояние: язык, тема, адрес адаптера, подключение, напряжение.
 /// Простой ChangeNotifier — без внешних пакетов состояния.
@@ -92,35 +93,68 @@ class AppState extends ChangeNotifier {
   int? get lastFaults => car.lastFaults;
   int? get lastAnswered => car.lastModules; // сколько блоков ответило на последнем скане
 
-  /// Итог последнего автоскана в этом подключении: экран «Блоки» показывает его,
-  /// а не сканирует заново. Новый скан — по кнопке «Автоскан» или «обновить».
+  /// Блоки по ходу идущего автоскана (пока он не сохранён).
   List<EcuResult> scanResults = [];
   bool scanRequested = false;
 
-  /// Кнопка «Автоскан»: открыть «Блоки» и опросить машину заново.
+  /// Кнопка «Автоскан»: открыть «Блоки» и опросить машину заново. Сам экран «Блоки»
+  /// не сканирует — показывает сохранённое.
   void requestScan() {
     scanRequested = true;
     tab.value = 1;
   }
 
-  /// Прочитали VIN: выбираем эту машину в гараже или заводим новую.
-  void setVin(String v) {
-    garage.onVin(v);
+  /// Сохранённые сканы текущей машины (новые первыми) и какой из них открыт.
+  final scanStore = ScanStore();
+  List<SavedScan> scans = [];
+  String? viewingId; // null — последний
+
+  SavedScan? get shownScan => scans.where((s) => s.id == viewingId).firstOrNull ?? scans.firstOrNull;
+
+  /// Открыт не последний скан: его только смотрят, пересканировать и сбрасывать нельзя.
+  bool get viewingOld => shownScan != null && shownScan != scans.first;
+
+  void viewScan(String? id) {
+    viewingId = id == scans.firstOrNull?.id ? null : id;
     notifyListeners();
   }
 
-  void setScanResult({required int faults, required int answered}) {
-    car.lastFaults = faults;
-    car.lastModules = answered;
-    car.lastScan = DateTime.now();
+  Future<void> loadScans() async {
+    try {
+      scans = await scanStore.list(car.id);
+    } catch (_) {
+      scans = []; // нет доступа к памяти (в тестах) — просто без истории
+    }
+    viewingId = null;
+    notifyListeners();
+  }
+
+  /// Сохранить скан текущей машины; он становится последним и открытым.
+  Future<void> saveScan(SavedScan s) async {
+    try {
+      await scanStore.save(car.id, s);
+    } catch (_) {}
+    scans = [s, ...scans].take(ScanStore.keep).toList();
+    viewingId = null;
+    car.lastFaults = s.faults;
+    car.lastModules = s.answered.length;
+    car.lastScan = s.time;
     garage.save();
+    notifyListeners();
+  }
+
+  /// Прочитали VIN: выбираем эту машину в гараже или заводим новую.
+  Future<void> setVin(String v) async {
+    final before = car.id;
+    garage.onVin(v);
+    if (car.id != before) await loadScans();
     notifyListeners();
   }
 
   void selectCar(String id) {
     garage.select(id);
     scanResults = [];
-    notifyListeners();
+    loadScans();
   }
 
   void updateCar(String id, {required String name, required String sub}) {
@@ -132,8 +166,21 @@ class AppState extends ChangeNotifier {
   }
 
   void removeCar(String id) {
+    final before = car.id;
     garage.remove(id);
+    scanStore.removeAll(id).catchError((_) {});
+    if (car.id != before) loadScans();
     notifyListeners();
+  }
+
+  /// Пустой гараж: все машины и их сканы (фото удаляет экран гаража).
+  void removeAllCars() {
+    for (final c in garage.cars) {
+      scanStore.removeAll(c.id).catchError((_) {});
+    }
+    garage.clear();
+    scanResults = [];
+    loadScans();
   }
 
   final SharedPreferences _prefs;
@@ -160,8 +207,33 @@ class AppState extends ChangeNotifier {
 
   String get lang => locale.languageCode;
 
-  static Future<AppState> create() async =>
-      AppState(await SharedPreferences.getInstance());
+  static Future<AppState> create() async {
+    final s = AppState(await SharedPreferences.getInstance());
+    await s.loadScans();
+    return s;
+  }
+
+  /// Без адаптера: гараж и сохранённые сканы. Живые данные и шина — только с подключением.
+  bool offline = false;
+
+  /// Есть связь с машиной: можно опрашивать блоки.
+  bool get live => diag != null;
+
+  Future<KnowledgeBase> ensureKb() async => kb ??= await KnowledgeBase.load('assets/kb/c3_ii.json',
+      extraDtc: 'assets/kb/c3_ii_dtc_gpl.json', psaCodes: 'assets/kb/psa_codes.json');
+
+  Future<void> openOffline() async {
+    await ensureKb();
+    diag = null;
+    offline = true;
+    notifyListeners();
+  }
+
+  /// Из режима без адаптера — на экран подключения.
+  void leaveOffline() {
+    offline = false;
+    notifyListeners();
+  }
 
   void setLocale(String code) {
     locale = Locale(code);
@@ -200,9 +272,7 @@ class AppState extends ChangeNotifier {
       final hello = await client.connect(adapterUrl);
       fw = hello['fw']?.toString() ?? '';
       batteryMv = (hello['mv'] as num?)?.toInt() ?? 0;
-      kb ??= await KnowledgeBase.load('assets/kb/c3_ii.json',
-          extraDtc: 'assets/kb/c3_ii_dtc_gpl.json', psaCodes: 'assets/kb/psa_codes.json');
-      diag = DiagService(client, kb!);
+      diag = DiagService(client, await ensureKb());
       scanResults = [];
       _evSub = client.events.listen(_onEvent);
     } catch (e) {
@@ -279,6 +349,8 @@ class AppState extends ChangeNotifier {
     await _evSub?.cancel();
     _evSub = null;
     await client.close();
+    diag = null;
+    offline = false;
     notifyListeners();
   }
 

@@ -101,7 +101,7 @@
   "carSub": "Engine, year",
   "save": "Save",
   "deleteCar": "Delete",
-  "deleteCarConfirm": "Delete this car and its photos from the phone?",
+  "deleteCarConfirm": "Delete this car, its photos and saved scans from the phone?",
   "garageHint": "A new car is added automatically by VIN after an auto scan.",
   "freezeFrame": "Freeze frame",
   "noFreezeFrame": "The module saved no freeze frame for this fault.",
@@ -186,5 +186,22 @@
         "type": "String"
       }
     }
-  }
+  },
+  "scanHistory": "Scan history",
+  "scanAt": "Scan {date}",
+  "scanModule": "module re-scanned: {name}",
+  "noScans": "No scans yet",
+  "noScansHint": "Run an auto scan; the result is saved on the phone.",
+  "needAdapterScan": "Connect the adapter and run an auto scan.",
+  "scanOlder": "An older scan from the history, view only.",
+  "scanLatest": "Latest",
+  "rescanModule": "Rescan this module",
+  "moduleReadAt": "read {date}",
+  "needAdapter": "Connect the adapter: live data is read from the car itself.",
+  "openOffline": "Garage and saved scans without the adapter",
+  "scanNobody": "No module answered. Is the adapter in the car and the ignition on? A scan like this is not saved.",
+  "newCar": "New car",
+  "garageEmpty": "The garage is empty. A car is added automatically by VIN after the first auto scan.",
+  "deleteAll": "Delete all",
+  "deleteAllConfirm": "Delete all cars together with their photos and saved scans?"
 }

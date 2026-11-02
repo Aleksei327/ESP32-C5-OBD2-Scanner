@@ -117,7 +117,7 @@ class _CarScreenState extends State<CarScreen> {
                           children: [
                             Flexible(
                               child: Text(
-                                app.car.name,
+                                app.car.name.isEmpty ? t.newCar : app.car.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: display(context, 28),
@@ -131,7 +131,12 @@ class _CarScreenState extends State<CarScreen> {
                     ),
                   ),
                 ),
-                _statusChip(context, app.connected, t),
+                // без адаптера чип ведёт на экран подключения
+                InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: app.live ? null : app.leaveOffline,
+                  child: _statusChip(context, app.live, t),
+                ),
                 IconButton(
                   icon: Icon(Icons.settings_outlined, color: p.textDim),
                   onPressed: () =>
@@ -162,7 +167,8 @@ class _CarScreenState extends State<CarScreen> {
             const SizedBox(height: 14),
             Row(
               children: [
-                Expanded(child: _stat(context, t.battery, t.volts(app.batteryText), p.good, () => app.tab.value = 2)),
+                Expanded(
+                    child: _stat(context, t.battery, app.live ? t.volts(app.batteryText) : '—', p.good, () => app.tab.value = 2)),
                 const SizedBox(width: 10),
                 Expanded(child: _stat(context, t.faults, faults == null ? '—' : '$faults', p.bad, () => app.tab.value = 1)),
                 const SizedBox(width: 10),
@@ -205,7 +211,8 @@ class _CarScreenState extends State<CarScreen> {
         type: MaterialType.transparency,
         child: InkWell(
           borderRadius: radius,
-          onTap: app.requestScan,
+          // без адаптера сканировать нечем — на экран подключения
+          onTap: app.live ? app.requestScan : app.leaveOffline,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Row(

@@ -2,6 +2,7 @@ import '../kb/knowledge_base.dart';
 import '../transport/adapter_client.dart';
 import '../transport/diag.dart';
 import '../transport/obd.dart';
+import 'scan_store.dart';
 
 /// Ход поиска блоков: сколько адресов проверено и кто откликнулся (запрос, ответ).
 class DiscoveryStep {
@@ -28,10 +29,35 @@ class EcuLink {
   List<Dtc> dtcs = [];
 
   String get name => def.node;
+
+  /// Как это сохраняется в скане.
+  SavedEcu saved() => SavedEcu(
+        tx: def.tx,
+        answered: answered,
+        time: DateTime.now(),
+        proto: !answered ? null : (proto is Kwp ? 'kwp' : proto is Uds ? 'uds' : null),
+        model: answered ? model?.name : null,
+        modelChosen: modelChosen,
+        part: answered ? part : null,
+        variant: answered ? variant : null,
+        dtcs: answered ? List.of(dtcs) : const [],
+      );
 }
 
 /// Итог опроса одного блока при автоскане.
 typedef EcuResult = EcuLink;
+
+/// Текст ошибки: из модели блока [m], иначе из любой модели этого места, иначе из списка
+/// кодов PSA, иначе общий текст кода SAE (generic — в интерфейсе это помечается).
+/// [check] — что проверить, из списка PSA. Без связи с машиной: годится и для сохранённых сканов.
+({String text, bool generic, String? check})? dtcInfoFor(KnowledgeBase kb, EcuDef d, EcuModel? m, Dtc dtc, String lang) {
+  final own = m?.dtcText(dtc.key, lang) ?? d.dtcText(dtc.key, lang);
+  final psa = kb.psaDtc(dtc.raw, dtc.code, lang, saeP: d.saeP);
+  if (own != null) return (text: own, generic: false, check: psa?.check);
+  if (psa != null) return (text: psa.text, generic: false, check: psa.check);
+  final g = kb.genericDtc(dtc.code, lang);
+  return g == null ? null : (text: g, generic: true, check: null);
+}
 
 /// Сведения о блоке для вкладки «Инфо».
 class EcuInfo {
@@ -65,22 +91,62 @@ class DiagService {
   Stream<EcuResult> autoScan() async* {
     await openDiag(write: true);
     for (final def in kb.ecus) {
-      final l = link(def);
-      l.dtcs = [];
-      try {
-        l.answered = await _probe(l);
-        if (l.answered) {
-          await detectModel(l);
-          try {
-            l.dtcs = await readFaults(def);
-          } on NegativeResponse {
-            l.dtcs = [];
-          }
+      yield await _scanOne(link(def));
+    }
+  }
+
+  /// Опросить заново один блок: на месте ли, какая модель (если не выбрана руками), ошибки.
+  Future<EcuResult> rescan(EcuDef d) async {
+    await openDiag(write: true);
+    final l = link(d);
+    if (!l.modelChosen) {
+      l.model = null;
+      l.part = null;
+      l.variant = null;
+    }
+    return _scanOne(l);
+  }
+
+  Future<EcuLink> _scanOne(EcuLink l) async {
+    l.dtcs = [];
+    try {
+      l.answered = await _probe(l);
+      if (l.answered) {
+        await detectModel(l);
+        try {
+          l.dtcs = await readFaults(l.def);
+        } on NegativeResponse {
+          l.dtcs = [];
         }
-      } catch (_) {
-        // блок ответил, а дальше связь пропала — считаем по тому, что успели
       }
-      yield l;
+    } catch (_) {
+      // блок ответил, а дальше связь пропала — считаем по тому, что успели
+    }
+    return l;
+  }
+
+  final _attached = <int, Future<void>>{};
+
+  /// Блок открыли из сохранённого скана, а в этом подключении его ещё не опрашивали:
+  /// открыть шину на передачу и сеанс, модель взять из скана, если сами её ещё не знаем.
+  /// Вкладки блока зовут это каждая у себя; опрос «ты здесь?» идёт один раз.
+  Future<void> attach(EcuDef d, SavedEcu? saved) => _attached[d.tx] ??= _attach(d, saved).catchError((Object e) {
+        _attached.remove(d.tx); // не вышло — в следующий раз попробуем снова
+        throw e;
+      });
+
+  Future<void> _attach(EcuDef d, SavedEcu? saved) async {
+    final l = link(d);
+    if (l.proto == null || !l.answered) {
+      await openDiag(write: true);
+      l.answered = await _probe(l);
+    }
+    final m = l.model == null ? d.modelNamed(saved?.model) : null;
+    if (m != null) {
+      l.model = m;
+      l.modelChosen = saved!.modelChosen;
+      l.part = saved.part;
+      l.variant = saved.variant;
     }
   }
 
@@ -291,18 +357,8 @@ class DiagService {
   Future<List<Dtc>> readFaults(EcuDef d) => _run(link(d), (p) => p.readDtcs());
   Future<void> clearFaults(EcuDef d) => _run(link(d), (p) => p.clearDtcs());
 
-  /// Текст ошибки: из опознанной модели, иначе из любой модели этого места, иначе из списка
-  /// кодов PSA, иначе общий текст кода SAE (generic — в интерфейсе это помечается).
-  /// [check] — что проверить, из списка PSA.
-  ({String text, bool generic, String? check})? dtcInfo(EcuDef d, Dtc dtc, String lang) {
-    final m = link(d).model;
-    final own = m?.dtcText(dtc.key, lang) ?? d.dtcText(dtc.key, lang);
-    final psa = kb.psaDtc(dtc.raw, dtc.code, lang, saeP: d.saeP);
-    if (own != null) return (text: own, generic: false, check: psa?.check);
-    if (psa != null) return (text: psa.text, generic: false, check: psa.check);
-    final g = kb.genericDtc(dtc.code, lang);
-    return g == null ? null : (text: g, generic: true, check: null);
-  }
+  ({String text, bool generic, String? check})? dtcInfo(EcuDef d, Dtc dtc, String lang) =>
+      dtcInfoFor(kb, d, link(d).model, dtc, lang);
 
   String? dtcText(EcuDef d, Dtc dtc, String lang) => dtcInfo(d, dtc, lang)?.text;
 

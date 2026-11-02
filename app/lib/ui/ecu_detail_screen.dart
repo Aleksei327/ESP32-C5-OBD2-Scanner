@@ -3,12 +3,21 @@ import 'package:flutter/material.dart';
 import '../kb/knowledge_base.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../main.dart';
+import '../state/app_state.dart';
 import '../state/diag_service.dart';
+import '../state/scan_store.dart';
 import '../theme.dart';
 import '../transport/diag.dart';
 import 'widgets.dart';
 
-/// Блок: вкладки Инфо / Ошибки / Данные / Опции. Опрос — через DiagService.
+/// Этот блок в открытом скане: что сохранено (модель, ошибки) и когда опрошен.
+SavedEcu? savedEcu(AppState app, EcuDef d) => app.shownScan?.ecu(d.tx);
+
+/// Модель блока: опознанная в этом подключении, иначе из скана.
+EcuModel? ecuModel(AppState app, EcuDef d) => app.diag?.link(d).model ?? d.modelNamed(savedEcu(app, d)?.model);
+
+/// Блок: вкладки Инфо / Ошибки / Данные / Опции. Инфо и ошибки — из сохранённого скана,
+/// данные и опции читаются вживую, когда адаптер подключён. Опрос — через DiagService.
 class EcuDetailScreen extends StatefulWidget {
   const EcuDetailScreen(this.def, {super.key});
   final EcuDef def;
@@ -18,8 +27,31 @@ class EcuDetailScreen extends StatefulWidget {
 
 class _EcuDetailScreenState extends State<EcuDetailScreen> with TickerProviderStateMixin {
   TabController? _tabs;
+  bool _rescanning = false;
 
-  bool _hasConfig(DiagService? d) => d != null && d.records(widget.def, 'config').isNotEmpty;
+  bool _hasConfig(AppState app) {
+    final saved = savedEcu(app, widget.def);
+    final variant = app.diag?.link(widget.def).variant ?? saved?.variant;
+    return ecuModel(app, widget.def)?.recordsFor(variant, 'config').isNotEmpty ?? false;
+  }
+
+  /// Опросить заново только этот блок; итог — новый скан в истории (остальные блоки из прошлого).
+  Future<void> _rescan() async {
+    final app = AppScope.read(context);
+    final t = AppLocalizations.of(context);
+    final diag = app.diag;
+    final last = app.scans.firstOrNull;
+    if (diag == null || last == null) return;
+    setState(() => _rescanning = true);
+    try {
+      final l = await diag.rescan(widget.def);
+      await app.saveScan(last.withEcu(l.saved(), module: widget.def.node, batteryMv: app.batteryMv, fw: app.fw));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.error('$e'))));
+    } finally {
+      if (mounted) setState(() => _rescanning = false);
+    }
+  }
 
   /// Вкладок 3 или 4 (есть ли настройки), а это зависит от модели блока — она может смениться.
   void _syncTabs(int n) {
@@ -69,10 +101,12 @@ class _EcuDetailScreenState extends State<EcuDetailScreen> with TickerProviderSt
     final p = context.p;
     final app = AppScope.of(context);
     final lang = app.lang;
-    final diag = app.diag;
-    final hasCfg = _hasConfig(diag);
+    final hasCfg = _hasConfig(app);
     _syncTabs(hasCfg ? 4 : 3);
-    final model = diag?.link(widget.def).model?.name ?? '';
+    final model = ecuModel(app, widget.def)?.name ?? '';
+    final saved = savedEcu(app, widget.def);
+    // пересканировать можно последний скан и только вживую; старый из истории — только смотреть
+    final canRescan = app.live && !app.viewingOld && app.scans.isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: p.bg,
@@ -82,7 +116,19 @@ class _EcuDetailScreenState extends State<EcuDetailScreen> with TickerProviderSt
               '${widget.def.tx.toRadixString(16).toUpperCase()} → ${widget.def.rx.toRadixString(16).toUpperCase()}'
               '${model.isEmpty ? '' : ' · $model'}',
               style: mono(context, 12, color: p.textDim)),
+          if (saved != null) Text(t.moduleReadAt(stamp(saved.time)), style: TextStyle(fontSize: 12, color: p.textDim)),
         ]),
+        actions: [
+          if (canRescan)
+            IconButton(
+              tooltip: t.rescanModule,
+              onPressed: _rescanning ? null : _rescan,
+              icon: _rescanning
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(Icons.refresh, color: p.accent),
+            ),
+          const SizedBox(width: 8),
+        ],
         bottom: FolderTabs(
           controller: _tabs!,
           tabs: [
@@ -96,11 +142,12 @@ class _EcuDetailScreenState extends State<EcuDetailScreen> with TickerProviderSt
       // SafeArea снизу: кнопки не должны уходить под системную панель Android
       body: SafeArea(
         top: false,
+        // ключ со временем опроса: пересканировали — вкладки строятся заново по новому итогу
         child: TabBarView(controller: _tabs, children: [
-          _IdentTab(widget.def, onChoose: _chooseModel, key: ValueKey('i$model')),
-          _FaultsTab(widget.def, key: ValueKey('f$model')),
-          _LiveTab(widget.def, onChoose: _chooseModel, key: ValueKey('l$model')),
-          if (hasCfg) _ConfigTab(widget.def, key: ValueKey('c$model')),
+          _IdentTab(widget.def, onChoose: _chooseModel, key: ValueKey('i$model${saved?.time}')),
+          _FaultsTab(widget.def, onRescan: canRescan ? _rescan : null, key: ValueKey('f$model${saved?.time}')),
+          app.live ? _LiveTab(widget.def, onChoose: _chooseModel, key: ValueKey('l$model')) : const NeedAdapter(),
+          if (hasCfg) app.live ? _ConfigTab(widget.def, key: ValueKey('c$model')) : const NeedAdapter(),
         ]),
       ),
     );
@@ -189,7 +236,11 @@ class _IdentTabState extends State<_IdentTab> {
   @override
   void initState() {
     super.initState();
-    AppScope.read(context).diag?.identify(widget.def).then(
+    // сохранённое показываем сразу; записи опознания дочитываем, если адаптер подключён
+    final app = AppScope.read(context);
+    final diag = app.diag;
+    if (diag == null) return;
+    diag.attach(widget.def, savedEcu(app, widget.def)).then((_) => diag.identify(widget.def)).then(
           (v) => mounted ? setState(() => _info = v) : null,
           onError: (_) => mounted ? setState(() => _failed = true) : null,
         );
@@ -198,17 +249,22 @@ class _IdentTabState extends State<_IdentTab> {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
-    final lang = AppScope.of(context).lang;
+    final app = AppScope.of(context);
+    final lang = app.lang;
     final p = context.p;
-    final diag = AppScope.of(context).diag;
+    final diag = app.diag;
     final l = diag?.link(widget.def);
-    if (_info == null && !_failed) return const Center(child: CircularProgressIndicator());
+    final saved = savedEcu(app, widget.def);
+    final model = ecuModel(app, widget.def);
+    final part = l?.part ?? saved?.part;
+    final variant = l?.variant ?? saved?.variant;
+    final proto = l?.proto?.name ?? switch (saved?.proto) { 'kwp' => 'KWP2000', 'uds' => 'UDS', _ => null };
     final canChoose = (diag?.modelChoices(widget.def).length ?? 0) > 1;
     final head = <(String, String)>[
-      (t.model, l?.model == null ? t.modelUnknown : l!.model!.name),
-      if (l?.part != null) (t.partNumber, l!.part!),
-      if (l?.variant != null) (t.softwareVariant, l!.variant!),
-      if (l?.proto != null) (t.protocol, l!.proto!.name),
+      (t.model, model == null ? t.modelUnknown : model.name),
+      if (part != null) (t.partNumber, part),
+      if (variant != null) (t.softwareVariant, variant),
+      if (proto != null) (t.protocol, proto),
       (t.address, '${widget.def.tx.toRadixString(16).toUpperCase()} → ${widget.def.rx.toRadixString(16).toUpperCase()}'),
       if (_info?.vin != null) (t.vin, _info!.vin!),
     ];
@@ -218,7 +274,7 @@ class _IdentTabState extends State<_IdentTab> {
     ];
     return ListView(padding: const EdgeInsets.all(20), children: [
       _KvCard(head),
-      if (l?.model == null || l!.modelChosen) ...[
+      if (diag != null && (l?.model == null || l!.modelChosen)) ...[
         const SizedBox(height: 12),
         if (l?.model == null) Text(t.chooseModelHint, style: TextStyle(color: p.textDim)),
         if (canChoose)
@@ -228,36 +284,24 @@ class _IdentTabState extends State<_IdentTab> {
           ),
       ],
       if (rows.isNotEmpty) ...[const SizedBox(height: 14), _KvCard(rows)],
+      if (diag != null && _info == null && !_failed)
+        const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
     ]);
   }
 }
 
+/// Ошибки из открытого скана. Сброс — только вживую и в последнем скане: после него блок
+/// пересканируется, и в истории остаются оба итога, до и после.
 class _FaultsTab extends StatefulWidget {
-  const _FaultsTab(this.def, {super.key});
+  const _FaultsTab(this.def, {required this.onRescan, super.key});
   final EcuDef def;
+  final Future<void> Function()? onRescan;
   @override
   State<_FaultsTab> createState() => _FaultsTabState();
 }
 
 class _FaultsTabState extends State<_FaultsTab> {
-  List<Dtc>? _dtcs;
   bool _busy = false;
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final d = await AppScope.read(context).diag?.readFaults(widget.def);
-      if (mounted) setState(() => _dtcs = d ?? []);
-    } catch (_) {
-      if (mounted) setState(() => _failed = true);
-    }
-  }
 
   Future<void> _clear() async {
     final t = AppLocalizations.of(context);
@@ -272,11 +316,14 @@ class _FaultsTabState extends State<_FaultsTab> {
       ),
     );
     if (ok != true || !mounted) return;
-    final diag = AppScope.read(context).diag;
+    final app = AppScope.read(context);
+    final diag = app.diag;
+    if (diag == null) return;
     setState(() => _busy = true);
     try {
-      await diag?.clearFaults(widget.def);
-      await _load();
+      await diag.attach(widget.def, savedEcu(app, widget.def));
+      await diag.clearFaults(widget.def);
+      await widget.onRescan?.call();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.error('$e'))));
     } finally {
@@ -299,9 +346,11 @@ class _FaultsTabState extends State<_FaultsTab> {
       _snap = null;
       _snapFailed = false;
     });
-    final diag = AppScope.read(context).diag;
+    final app = AppScope.read(context);
+    final diag = app.diag;
     try {
-      final s = await diag!.readSnapshot(widget.def, d);
+      await diag!.attach(widget.def, savedEcu(app, widget.def));
+      final s = await diag.readSnapshot(widget.def, d);
       if (mounted && _open == d.key) setState(() => _snap = s);
     } catch (_) {
       if (mounted && _open == d.key) setState(() => _snapFailed = true);
@@ -351,24 +400,26 @@ class _FaultsTabState extends State<_FaultsTab> {
     final t = AppLocalizations.of(context);
     final p = context.p;
     final app = AppScope.of(context);
-    if (_failed) return Center(child: Text(t.readFailed, style: TextStyle(color: p.textDim)));
-    if (_dtcs == null) return const Center(child: CircularProgressIndicator());
-    if (_dtcs!.isEmpty) {
+    final dtcs = savedEcu(app, widget.def)?.dtcs ?? const <Dtc>[];
+    final model = ecuModel(app, widget.def);
+    // стоп-кадр читается из блока — только вживую
+    final live = app.live;
+    if (dtcs.isEmpty) {
       return Center(child: Text(t.noFaults, style: TextStyle(color: p.textDim)));
     }
     return Column(children: [
       Expanded(
         child: ListView.separated(
           padding: const EdgeInsets.all(20),
-          itemCount: _dtcs!.length,
+          itemCount: dtcs.length,
           separatorBuilder: (_, _) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
-            final d = _dtcs![i];
-            final info = app.diag?.dtcInfo(widget.def, d, app.lang);
-            final open = _open == d.key;
+            final d = dtcs[i];
+            final info = app.kb == null ? null : dtcInfoFor(app.kb!, widget.def, model, d, app.lang);
+            final open = live && _open == d.key;
             return GlowCard(
               tint: d.active ? p.bad : p.border,
-              onTap: () => _toggle(d),
+              onTap: live ? () => _toggle(d) : null,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Text(d.code, style: mono(context, 16).copyWith(fontWeight: FontWeight.w600)),
@@ -378,7 +429,7 @@ class _FaultsTabState extends State<_FaultsTab> {
                   Pill(d.active ? t.faultActive : t.faultStored,
                       fg: d.active ? Colors.white : p.textDim,
                       bg: d.active ? p.bad : p.textDim.withValues(alpha: 0.12)),
-                  Icon(open ? Icons.expand_less : Icons.expand_more, color: p.textDim),
+                  if (live) Icon(open ? Icons.expand_less : Icons.expand_more, color: p.textDim),
                 ]),
                 const SizedBox(height: 6),
                 Text(info?.text ?? t.unknownFault, style: TextStyle(color: p.text)),
@@ -398,16 +449,17 @@ class _FaultsTabState extends State<_FaultsTab> {
           },
         ),
       ),
-      Padding(
-        padding: const EdgeInsets.all(20),
-        child: GradientButton(
-          icon: Icons.delete_sweep_rounded,
-          label: t.clearFaults,
-          colors: const [Color(0xFFE11D48), Color(0xFFF97316)],
-          busy: _busy,
-          onPressed: _clear,
+      if (widget.onRescan != null)
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: GradientButton(
+            icon: Icons.delete_sweep_rounded,
+            label: t.clearFaults,
+            colors: const [Color(0xFFE11D48), Color(0xFFF97316)],
+            busy: _busy,
+            onPressed: _clear,
+          ),
         ),
-      ),
     ]);
   }
 }
@@ -427,12 +479,24 @@ class _LiveTabState extends State<_LiveTab> {
   bool _failed = false;
   bool _run = true;
   int _gen = 0; // смена группы обрывает старый опрос
+  bool _attached = false;
 
   List<Record> get _recs => AppScope.read(context).diag?.records(widget.def, 'live') ?? const [];
 
   @override
   void initState() {
     super.initState();
+    _start();
+  }
+
+  /// Блок мог прийти из сохранённого скана: сначала сеанс и модель, потом опрос.
+  Future<void> _start() async {
+    final app = AppScope.read(context);
+    try {
+      await app.diag?.attach(widget.def, savedEcu(app, widget.def));
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _attached = true);
     _poll();
   }
 
@@ -478,6 +542,7 @@ class _LiveTabState extends State<_LiveTab> {
     final p = context.p;
     final diag = AppScope.of(context).diag;
     final recs = _recs;
+    if (!_attached) return const Center(child: CircularProgressIndicator());
     if (diag?.link(widget.def).model == null) {
       return Center(
         child: Padding(
@@ -567,8 +632,12 @@ class _ConfigTabState extends State<_ConfigTab> {
   }
 
   Future<void> _load() async {
-    final diag = AppScope.read(context).diag;
+    final app = AppScope.read(context);
+    final diag = app.diag;
     if (diag == null) return;
+    try {
+      await diag.attach(widget.def, savedEcu(app, widget.def));
+    } catch (_) {}
     for (final r in diag.records(widget.def, 'config')) {
       List<(Param, ParamValue)>? v;
       try {

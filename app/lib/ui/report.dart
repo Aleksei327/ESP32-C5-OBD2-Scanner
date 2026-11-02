@@ -6,43 +6,58 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import '../kb/knowledge_base.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../state/app_state.dart';
 import '../state/diag_service.dart';
+import '../state/scan_store.dart';
+import '../transport/diag.dart';
 import 'ecu_detail_screen.dart' show formatValue, liveUnit;
+import 'widgets.dart' show stamp;
 
-/// Отчёт по автоскану в PDF: машина, блоки, ошибки с расшифровкой и стоп-кадрами.
+/// Отчёт по сохранённому скану в PDF: машина, блоки, ошибки с расшифровкой и стоп-кадрами.
 /// Делается на телефоне и отдаётся в «Поделиться» (мессенджер, почта, диск).
 class ScanReport {
-  static Future<void> share(AppState app, AppLocalizations t, List<EcuResult> results) async {
-    final file = await build(app, t, results);
+  static Future<void> share(AppState app, AppLocalizations t, SavedScan scan) async {
+    final file = await build(app, t, scan);
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')], subject: t.reportTitle));
   }
 
-  static Future<File> build(AppState app, AppLocalizations t, List<EcuResult> results) async {
+  static Future<File> build(AppState app, AppLocalizations t, SavedScan scan) async {
     final lang = app.lang;
+    final kb = await app.ensureKb();
     final regular = pw.Font.ttf(await rootBundle.load('assets/google_fonts/IBMPlexSans-Regular.ttf'));
     final bold = pw.Font.ttf(await rootBundle.load('assets/google_fonts/IBMPlexSans-Bold.ttf'));
     final mono = pw.Font.ttf(await rootBundle.load('assets/google_fonts/IBMPlexMono-Regular.ttf'));
-    final now = DateTime.now();
+    final when = scan.time;
     String two(int v) => v.toString().padLeft(2, '0');
-    final date = '${two(now.day)}.${two(now.month)}.${now.year} ${two(now.hour)}:${two(now.minute)}';
+    final results = [
+      for (final e in scan.ecus)
+        if (kb.ecus.where((d) => d.tx == e.tx).firstOrNull case final def?) (def: def, e: e),
+    ];
 
-    // стоп-кадры подтягиваем сразу, чтобы они были в отчёте
+    // стоп-кадры читаются из блоков — только вживую и для последнего скана
     final snaps = <String, List<String>>{};
-    for (final r in results.where((r) => r.answered && r.dtcs.isNotEmpty)) {
-      for (final d in r.dtcs) {
-        try {
-          final s = await app.diag!.readSnapshot(r.def, d);
-          snaps['${r.def.tx}:${d.code}'] = [
-            for (final (p, v) in s) '${p.nameFor(lang)} ${formatValue(p, v, t, lang)} ${liveUnit(p.units, t, lang)}'.trim()
-          ];
-        } catch (_) {}
+    final diag = app.diag;
+    if (diag != null && !app.viewingOld) {
+      for (final r in results.where((r) => r.e.answered && r.e.dtcs.isNotEmpty)) {
+        for (final d in r.e.dtcs) {
+          try {
+            await diag.attach(r.def, r.e);
+            final s = await diag.readSnapshot(r.def, d);
+            snaps['${r.def.tx}:${d.code}'] = [
+              for (final (p, v) in s) '${p.nameFor(lang)} ${formatValue(p, v, t, lang)} ${liveUnit(p.units, t, lang)}'.trim()
+            ];
+          } catch (_) {}
+        }
       }
     }
 
-    final answered = results.where((r) => r.answered).toList();
-    final faults = answered.fold<int>(0, (n, r) => n + r.dtcs.length);
+    final answered = results.where((r) => r.e.answered).toList();
+    final faults = scan.faults;
+    final vin = scan.vin ?? app.vin;
+    ({String text, bool generic, String? check})? info(EcuDef def, SavedEcu e, Dtc d) =>
+        dtcInfoFor(kb, def, def.modelNamed(e.model), d, lang);
     const ink = PdfColor.fromInt(0xFF0F172A);
     const dim = PdfColor.fromInt(0xFF475569);
     const red = PdfColor.fromInt(0xFFBE185D);
@@ -76,15 +91,15 @@ class ScanReport {
           child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.Text(t.reportTitle, style: pw.TextStyle(color: PdfColors.white, fontSize: 18, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 2),
-            pw.Text('${app.car.name}${app.car.sub.isEmpty ? '' : ' · ${app.car.sub}'}',
+            pw.Text('${app.car.name.isEmpty ? t.newCar : app.car.name}${app.car.sub.isEmpty ? '' : ' · ${app.car.sub}'}',
                 style: const pw.TextStyle(color: PdfColors.white, fontSize: 12)),
           ]),
         ),
         pw.SizedBox(height: 12),
-        kv(t.reportDate, date),
-        if (app.vin != null) kv(t.vin, app.vin!),
-        kv(t.battery, t.volts(app.batteryText)),
-        if (app.fw.isNotEmpty) kv(t.firmware, app.fw),
+        kv(t.reportDate, stamp(when)),
+        if (vin != null) kv(t.vin, vin),
+        if (scan.batteryMv > 0) kv(t.battery, t.volts((scan.batteryMv / 1000).toStringAsFixed(1).replaceAll('.', ','))),
+        if (scan.fw.isNotEmpty) kv(t.firmware, scan.fw),
         pw.SizedBox(height: 10),
         pw.Text('${t.modules}: ${answered.length}/${results.length} · ${t.faultCount(faults)}',
             style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: faults > 0 ? red : green)),
@@ -94,7 +109,7 @@ class ScanReport {
             margin: const pw.EdgeInsets.only(bottom: 8),
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: r.dtcs.isNotEmpty ? red : line),
+              border: pw.Border.all(color: r.e.dtcs.isNotEmpty ? red : line),
               borderRadius: pw.BorderRadius.circular(8),
             ),
             child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
@@ -105,23 +120,23 @@ class ScanReport {
                     style: pw.TextStyle(font: mono, fontSize: 9, color: dim)),
                 pw.Spacer(),
                 pw.Text(
-                  !r.answered ? t.noAnswer : t.faultCount(r.dtcs.length),
-                  style: pw.TextStyle(fontSize: 10, color: !r.answered ? dim : (r.dtcs.isEmpty ? green : red)),
+                  !r.e.answered ? t.noAnswer : t.faultCount(r.e.dtcs.length),
+                  style: pw.TextStyle(fontSize: 10, color: !r.e.answered ? dim : (r.e.dtcs.isEmpty ? green : red)),
                 ),
               ]),
-              for (final d in r.dtcs) ...[
+              for (final d in r.e.dtcs) ...[
                 pw.SizedBox(height: 6),
                 pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                   pw.SizedBox(width: 52, child: pw.Text(d.code, style: pw.TextStyle(font: mono, fontSize: 10, color: ink))),
                   pw.Expanded(
                     child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                       pw.Text(
-                          switch (app.diag?.dtcInfo(r.def, d, lang)) {
+                          switch (info(r.def, r.e, d)) {
                             null => t.unknownFault,
                             final i => i.generic ? '${i.text} (${t.genericSae})' : i.text,
                           },
                           style: const pw.TextStyle(fontSize: 10)),
-                      if (app.diag?.dtcInfo(r.def, d, lang)?.check case final c?)
+                      if (info(r.def, r.e, d)?.check case final c?)
                         pw.Text(t.faultCheck(c), style: pw.TextStyle(fontSize: 8.5, color: dim)),
                       if (!r.def.saeP && d.psa != null)
                         pw.Text('PSA ${d.psa}', style: pw.TextStyle(font: mono, fontSize: 8.5, color: dim)),
@@ -140,8 +155,8 @@ class ScanReport {
     ));
 
     final dir = await getTemporaryDirectory();
-    final stamp = '${now.year}${two(now.month)}${two(now.day)}_${two(now.hour)}${two(now.minute)}';
-    final file = File('${dir.path}/OBD_${(app.vin ?? 'car').replaceAll(RegExp(r'[^A-Za-z0-9]'), '')}_$stamp.pdf');
+    final name = '${when.year}${two(when.month)}${two(when.day)}_${two(when.hour)}${two(when.minute)}';
+    final file = File('${dir.path}/OBD_${(vin ?? 'car').replaceAll(RegExp(r'[^A-Za-z0-9]'), '')}_$name.pdf');
     await file.writeAsBytes(await doc.save());
     return file;
   }

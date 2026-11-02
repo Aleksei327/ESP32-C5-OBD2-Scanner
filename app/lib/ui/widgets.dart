@@ -467,3 +467,9 @@ class FolderTabs extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
+/// Дата и время для людей: 02.11.2026 15:27.
+String stamp(DateTime d) {
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(d.day)}.${two(d.month)}.${d.year} ${two(d.hour)}:${two(d.minute)}';
+}

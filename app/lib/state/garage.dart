@@ -14,6 +14,9 @@ class CarProfile {
   int? lastFaults;
   int? lastModules; // сколько блоков ответило на последнем скане
 
+  /// Заготовка пустого гаража: ни имени, ни VIN, ни скана. Первый автоскан сделает её машиной.
+  bool get blank => vin == null && name.isEmpty && lastScan == null;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'vin': vin,
@@ -42,10 +45,7 @@ class Garage {
     if (raw != null) {
       cars = [for (final j in jsonDecode(raw) as List) CarProfile.fromJson(j as Map<String, dynamic>)];
     }
-    if (cars.isEmpty) {
-      // первая машина — твоя; VIN допишется сам после первого скана
-      cars.add(CarProfile(id: 'default', name: 'Citroën C3 II', sub: '1.4 KFT · 2011'));
-    }
+    if (cars.isEmpty) cars.add(_blank());
     currentId = _prefs.getString('garageCurrent') ?? cars.first.id;
     if (!cars.any((c) => c.id == currentId)) currentId = cars.first.id;
   }
@@ -55,6 +55,11 @@ class Garage {
   late String currentId;
 
   CarProfile get current => cars.firstWhere((c) => c.id == currentId);
+
+  /// Машины для списка в гараже (без пустой заготовки).
+  Iterable<CarProfile> get real => cars.where((c) => !c.blank);
+
+  static CarProfile _blank() => CarProfile(id: 'car${DateTime.now().millisecondsSinceEpoch}', name: '');
 
   void save() {
     _prefs.setString('garage', jsonEncode([for (final c in cars) c.toJson()]));
@@ -74,8 +79,12 @@ class Garage {
       save();
       return false;
     }
-    if (current.vin == null) {
+    if (current.vin == null && !isSimulatorVin(vin)) {
       current.vin = vin; // у текущей машины VIN ещё не было — это она
+      if (current.name.isEmpty) {
+        current.name = brandFromVin(vin); // пустой гараж: имя по VIN, поправить можно руками
+        current.sub = yearFromVin(vin) ?? '';
+      }
       save();
       return false;
     }
@@ -91,13 +100,24 @@ class Garage {
     return true;
   }
 
+  /// Удалить машину; последнюю тоже — гараж станет пустым.
   void remove(String id) {
     cars.removeWhere((c) => c.id == id);
-    if (cars.isEmpty) cars.add(CarProfile(id: 'default', name: 'Car'));
+    if (!cars.any((c) => !c.blank)) cars = [cars.where((c) => c.blank).firstOrNull ?? _blank()];
     if (!cars.any((c) => c.id == currentId)) currentId = cars.first.id;
     save();
   }
+
+  /// Удалить все машины: остаётся пустой гараж.
+  void clear() {
+    cars = [_blank()];
+    currentId = cars.first.id;
+    save();
+  }
 }
+
+/// VIN симулятора адаптера (sim/c3_sim.py): своя машина в гараже, чужой VIN не занимает.
+bool isSimulatorVin(String vin) => vin.toUpperCase().contains('SIMULATOR');
 
 /// Марка по первым трём знакам VIN (WMI) — самые частые в Европе.
 String brandFromVin(String vin) {
