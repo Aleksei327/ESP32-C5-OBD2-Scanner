@@ -19,7 +19,7 @@
 static can_ch_t s_a = {.name = "CAN-A (OBD 6/14)", .tx = CAN_A_TX_GPIO, .rx = CAN_A_RX_GPIO, .rs = CAN_A_RS_GPIO};
 static can_ch_t s_b = {.name = "CAN-B (OBD 3/8)", .tx = CAN_B_TX_GPIO, .rx = CAN_B_RX_GPIO, .rs = CAN_B_RS_GPIO};
 
-// Каналы A и B соединены друг с другом, оба терминатора JP2/JP3 замкнуты
+// Каналы A и B соединены друг с другом, между H и L резистор 120 Ом
 static int one_way(can_ch_t *from, char to, uint32_t id, int n)
 {
     int ok = 0;
@@ -48,7 +48,7 @@ static int cmd_selftest(int argc, char **argv)
         return 1;
     }
     const int n = 20;
-    printf("Самотест: каналы A и B соединены проводами, JP2 и JP3 замкнуты.\n");
+    printf("Самотест: каналы A и B соединены проводами, между H и L резистор 120 Ом.\n");
     if (can_ch_start(&s_a, false, CAN_BITRATE) != ESP_OK || can_ch_start(&s_b, false, CAN_BITRATE) != ESP_OK) {
         return 1;
     }
@@ -157,7 +157,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&hw_cfg, &repl_cfg, &repl));
 
     const esp_console_cmd_t cmds[] = {
-        {.command = "selftest", .help = "Самотест: A и B соединены проводами, JP2/JP3 замкнуты", .func = cmd_selftest},
+        {.command = "selftest", .help = "Самотест: A и B соединены проводами, между H и L 120 Ом", .func = cmd_selftest},
         {.command = "listen", .help = "listen [секунды] — печатать кадры обеих шин, ничего не передавая", .func = cmd_listen},
         {.command = "vbat", .help = "Напряжение АКБ", .func = cmd_vbat},
         {.command = "wifi", .help = "Сеть и пароль; wifi pass <новый> — сменить пароль", .func = cmd_wifi},

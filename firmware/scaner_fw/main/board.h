@@ -4,7 +4,7 @@
 #include "driver/gpio.h"
 
 // Ножки выбраны под одностороннюю разводку платы v1 (2026-10-18).
-// На D подтяжек нет: передатчик выключен, пока Rs = 1 (подтяжка 10k), см. can_ch.c.
+// На D подтяжек нет: передатчик выключен, пока Rs = 1 (подтяжки R11 12k, R12 10k), см. can_ch.c.
 
 // Канал A — OBD 6/14, стандартный OBD-II
 #define CAN_A_TX_GPIO   GPIO_NUM_8    // D8
@@ -16,9 +16,9 @@
 #define CAN_B_RX_GPIO   GPIO_NUM_10   // D10
 #define CAN_B_RS_GPIO   GPIO_NUM_24   // D5
 
-// Напряжение АКБ: делитель 220k/33k после HS1M на D0 (GPIO1, ADC1_CH0)
+// Напряжение АКБ: делитель 200k/33k после HS1M на D0 (GPIO1, ADC1_CH0); на плате R9 = 200k вместо 220k
 #define VBAT_ADC_GPIO   GPIO_NUM_1
-#define VBAT_DIVIDER    ((220.0f + 33.0f) / 33.0f)
+#define VBAT_DIVIDER    ((200.0f + 33.0f) / 33.0f)
 #define VBAT_DIODE_DROP 0.9f          // падение на HS1M, уточнить калибровкой
 
 #define CAN_BITRATE     500000        // и OBD-II, и Diag-on-CAN PSA — 500 кбит/с

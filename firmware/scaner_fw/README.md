@@ -17,7 +17,7 @@ Network `SCANER-C5-XXXX` (XXXX is the end of the MAC address), WPA2. The passwor
 | `wifi pass <password>` | Change the password (8–63 characters) |
 | `vbat` | Battery voltage from the divider on D0 |
 | `listen [seconds]` | Print the frames of both buses without transmitting (Rs = 1, controllers in listen-only mode) |
-| `selftest` | Channels A and B wired together, JP2/JP3 closed: sends frames A→B and B→A. Only while no app is connected |
+| `selftest` | Channels A and B wired together, a 120 Ω resistor across H and L: sends frames A→B and B→A. Only while no app is connected |
 
 ## How it works
 
