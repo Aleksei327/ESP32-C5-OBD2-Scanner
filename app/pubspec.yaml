@@ -2,7 +2,7 @@ name: scaner_app
 description: "OBD scanner app for the ESP32-C5 adapter"
 publish_to: 'none'
 
-version: 0.1.4+5
+version: 0.1.5+6
 
 environment:
   sdk: ^3.12.2

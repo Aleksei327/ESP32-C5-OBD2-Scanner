@@ -55,6 +55,7 @@ class AdapterClient {
       if (!c.isCompleted) c.completeError(StateError(err));
     }
     _pending.clear();
+    busWrite.clear();
     if (_ch != null) {
       _ch = null;
       _events.add({'ev': 'down', 'err': err});
@@ -76,10 +77,19 @@ class AdapterClient {
     });
   }
 
-  Future<void> openBus(String bus, {bool listen = true, int bitrate = 500000}) =>
-      call('bus.open', args: {'bus': bus, 'listen': listen, 'bitrate': bitrate});
+  /// Как мы открыли шины: true — на передачу, false — только слушать; закрытой нет в карте.
+  /// Экраны открывают и закрывают шины сами, диагностика по этой карте открывает свою заново.
+  final busWrite = <String, bool>{};
 
-  Future<void> closeBus(String bus) => call('bus.close', args: {'bus': bus});
+  Future<void> openBus(String bus, {bool listen = true, int bitrate = 500000}) async {
+    await call('bus.open', args: {'bus': bus, 'listen': listen, 'bitrate': bitrate});
+    busWrite[bus] = !listen;
+  }
+
+  Future<void> closeBus(String bus) async {
+    await call('bus.close', args: {'bus': bus});
+    busWrite.remove(bus);
+  }
 
   Future<void> monitor(String bus, {String mode = 'summary', List<String>? ids}) =>
       call('monitor.start',
@@ -99,7 +109,9 @@ class AdapterClient {
           'data': _hex(data),
           'timeout_ms': timeoutMs,
         },
-        timeout: Duration(milliseconds: timeoutMs + 1500));
+        // «подождите» (7F xx 78) адаптер пережидает сам, продлевая ожидание до 5 с каждый раз:
+        // сброс ошибок у BSI так и идёт, ответ приходит через несколько секунд после timeoutMs
+        timeout: Duration(milliseconds: timeoutMs + 12000));
     if (r['ok'] == true) return _unhex(r['data'] as String);
     throw AdapterError(r['err']?.toString() ?? 'unknown');
   }

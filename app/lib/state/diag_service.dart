@@ -197,8 +197,10 @@ class DiagService {
           ? Kwp(client, kb.diagBus, l.def.tx, l.def.rx)
           : Uds(client, kb.diagBus, l.def.tx, l.def.rx));
 
-  /// Перед запросом: держим сеанс KWP открытым (переоткрываем после простоя).
+  /// Перед запросом: шина на передачу (монитор шины мог её закрыть или перевести
+  /// в «только слушать»), сеанс KWP открыт (переоткрываем после простоя).
   Future<DiagProtocol> _ready(EcuLink l) async {
+    if (client.busWrite[kb.diagBus] != true) await openDiag(write: true);
     final p = _proto(l);
     if (p is Kwp && l.kwpOpen != null && DateTime.now().difference(l._last) > kwpIdle) {
       try {

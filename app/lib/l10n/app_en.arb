@@ -203,5 +203,15 @@
   "newCar": "New car",
   "garageEmpty": "The garage is empty. A car is added automatically by VIN after the first auto scan.",
   "deleteAll": "Delete all",
-  "deleteAllConfirm": "Delete all cars together with their photos and saved scans?"
+  "deleteAllConfirm": "Delete all cars together with their photos and saved scans?",
+  "errNoAnswer": "The module did not answer in time",
+  "errListenOnly": "The bus is in listen-only mode",
+  "nrcNotSupported": "command not supported",
+  "nrcBusy": "module busy, try again",
+  "nrcConditions": "conditions not correct — e.g. the engine is running: stop it, keep the ignition on",
+  "nrcRange": "request out of range",
+  "nrcSecurity": "access denied",
+  "nrcSession": "not available in this session",
+  "nrcOther": "refused",
+  "errNrc": "The module refused: {why} (code {code})"
 }

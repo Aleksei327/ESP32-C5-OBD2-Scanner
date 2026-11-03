@@ -26,6 +26,7 @@ import websockets
 
 FW = 'sim-0.2.0'
 VIN = 'VF7SIMULATORC3001'          # 17 знаков, заведомо не настоящий
+CLEAR_PENDING_S = 3.5              # сколько блок «стирает» ошибки (с «подождите» 7F 14 78)
 KB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'app', 'assets', 'kb', 'c3_ii.json')
 KWP_IDLE_S = 5.0                   # сеанс KWP гаснет без запросов
 
@@ -424,7 +425,12 @@ class Sim:
                 await asyncio.sleep(min(msg.get('timeout_ms', 1000), 3000) / 1000)
                 return err('timeout')
             self.car.warm()
-            return ok(data=hx(ecu.handle(data, self)), rx='%X' % ecu.rx)
+            answer = ecu.handle(data, self)
+            if data[0] == 0x14 and answer[0] == 0x54:
+                # как настоящие блоки: на сброс сначала «подождите» (7F 14 78), адаптер это
+                # пережидает, итог — через несколько секунд, позже обычного timeout_ms
+                await asyncio.sleep(CLEAR_PENDING_S)
+            return ok(data=hx(answer), rx='%X' % ecu.rx)
         if cmd in ('tester.start', 'tester.stop'):
             return ok()
         if cmd == 'monitor.start':

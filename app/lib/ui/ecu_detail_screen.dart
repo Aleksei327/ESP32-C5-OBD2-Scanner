@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../kb/knowledge_base.dart';
@@ -7,6 +9,7 @@ import '../state/app_state.dart';
 import '../state/diag_service.dart';
 import '../state/scan_store.dart';
 import '../theme.dart';
+import '../transport/adapter_client.dart';
 import '../transport/diag.dart';
 import 'widgets.dart';
 
@@ -15,6 +18,25 @@ SavedEcu? savedEcu(AppState app, EcuDef d) => app.shownScan?.ecu(d.tx);
 
 /// Модель блока: опознанная в этом подключении, иначе из скана.
 EcuModel? ecuModel(AppState app, EcuDef d) => app.diag?.link(d).model ?? d.modelNamed(savedEcu(app, d)?.model);
+
+/// Ошибка опроса словами: отказ блока с причиной по коду, молчание, режим шины.
+String diagError(Object e, AppLocalizations t) {
+  if (e is NegativeResponse) {
+    final why = switch (e.code) {
+      0x11 || 0x12 => t.nrcNotSupported,
+      0x21 => t.nrcBusy,
+      0x22 => t.nrcConditions,
+      0x31 => t.nrcRange,
+      0x33 => t.nrcSecurity,
+      0x7E || 0x7F || 0x80 => t.nrcSession,
+      _ => t.nrcOther,
+    };
+    return t.errNrc(why, '0x${e.code.toRadixString(16).padLeft(2, '0').toUpperCase()}');
+  }
+  if (e is TimeoutException || (e is AdapterError && e.code == 'timeout')) return t.errNoAnswer;
+  if (e is AdapterError && e.code == 'listen_only') return t.errListenOnly;
+  return t.error('$e');
+}
 
 /// Блок: вкладки Инфо / Ошибки / Данные / Опции. Инфо и ошибки — из сохранённого скана,
 /// данные и опции читаются вживую, когда адаптер подключён. Опрос — через DiagService.
@@ -45,9 +67,11 @@ class _EcuDetailScreenState extends State<EcuDetailScreen> with TickerProviderSt
     setState(() => _rescanning = true);
     try {
       final l = await diag.rescan(widget.def);
+      // не ответил (например, ещё занят после сброса) — в историю не пишем, прошлое остаётся
+      if (!l.answered) throw AdapterError('timeout');
       await app.saveScan(last.withEcu(l.saved(), module: widget.def.node, batteryMv: app.batteryMv, fw: app.fw));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.error('$e'))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(diagError(e, t))));
     } finally {
       if (mounted) setState(() => _rescanning = false);
     }
@@ -320,14 +344,19 @@ class _FaultsTabState extends State<_FaultsTab> {
     final diag = app.diag;
     if (diag == null) return;
     setState(() => _busy = true);
+    Object? err;
     try {
       await diag.attach(widget.def, savedEcu(app, widget.def));
       await diag.clearFaults(widget.def);
-      await widget.onRescan?.call();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.error('$e'))));
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      err = e;
+    }
+    // что бы блок ни ответил, перечитываем его: так видно, стёрлось ли на самом деле
+    await Future.delayed(const Duration(milliseconds: 500));
+    await widget.onRescan?.call();
+    if (mounted) {
+      setState(() => _busy = false);
+      if (err != null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(diagError(err, t))));
     }
   }
 
