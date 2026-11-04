@@ -2,11 +2,14 @@
 
 [Русская версия](README.ru.md)
 
-KiCad 10 project of the adapter board: 40 × 70 mm, single-sided (all tracks on the bottom copper, no wire jumpers), designed for home etching. Description and design notes: [DOCS/en/board-v1.md](../../DOCS/en/board-v1.md).
+KiCad 10 project of the adapter board: 40 × 60 mm, single-sided (all tracks on the bottom copper, no wire jumpers), designed for home etching and built into an OBD2 enclosure. Description and design notes: [DOCS/en/board-v1.md](../../DOCS/en/board-v1.md).
 
 | Top | Bottom |
 | --- | --- |
 | ![Top](../../DOCS/images/board-3d-top.png) | ![Bottom](../../DOCS/images/board-3d-bottom.png) |
+| ![Assembled in the enclosure](../../DOCS/images/photo-assembled.jpg) | ![Copper side as etched](../../DOCS/images/photo-copper.jpg) |
+
+Top row: KiCad 3D. Bottom row: the board as built, in its enclosure and from the copper side.
 
 ## Files
 

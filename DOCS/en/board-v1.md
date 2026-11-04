@@ -23,7 +23,7 @@ The SN65HVD230 chips are desoldered from Waveshare modules and mounted directly 
 
 OBD2 enclosure with a built-in connector (AliExpress, ~10 €). From the seller's photos: 72 × 45 mm outside, 42 mm wide inside, four screw posts 35 × 40 mm apart (centre to centre).
 
-- Board 40 × 70 mm, four M3 holes on the posts: 35 mm across, 40 mm along. For now they are centred along the length — to be checked on the real enclosure (distance from the connector end to the first pair of posts).
+- Board 40 × 60 mm as built, fitted to the real enclosure: four Ø5.5 mm holes over the screw posts, centres 30.8 mm across and 35.6 mm along; the first pair is 9.55 mm from the edge at the connector end.
 - Single-sided board, same style as my lab PSU: bottom copper carries the etched tracks, the top side would only carry wire jumpers (this board needs none).
 - Short wires run from the connector pins to the pads (only pins 3, 4, 5, 6, 8, 14, 16 are used). Power (16, 4, 5) goes to J1 next to the fuse, and both CAN pairs go to J2 next to the transceivers: 14, 6, 8, 3 (4–5 cm wires, twist the pairs). This avoids a four-track bus across the whole board.
 - The IRFB4110 (TO-220) lies tab-down over the LM2596, no screw. The 1.5KE TVS (DO-201AD, 12.7 mm pitch) and the glass zeners (DO-35, 3.5 × 1.9 mm body, 5.08 mm pitch) lie flat. The electrolytics (C1 10 mm, C3 8 mm, both 12.3 mm tall) stand upright: they are no taller than the XIAO on its sockets (~13 mm). C1 sits next to an Ø8 enclosure post with ~0.5 mm to spare.

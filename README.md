@@ -4,9 +4,19 @@
 
 A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, together with a read-only Android app. The first target is my own Citroën C3 II (2011, 1.4 KFT): ECU list, fault codes (read and clear), live data, freeze frames, a bus monitor and a PDF report. Other cars are added through a JSON knowledge base, without changing the firmware.
 
-> **Status (November 2026):** board v1 is etched, assembled in its enclosure and working. On the bench: self-test of both CAN channels, Wi-Fi, the app and remote access through the phone. On 2 November, the first full scan of the C3 II: 10 ECUs answered, fault codes and live data read (`remote/scan.py`).
+> **Status (November 2026): working, tested on the car.** Board v1 is built into its OBD2 enclosure, the firmware and app 0.1.5 are finished for the C3 II, and the whole chain has been used on the car: on 2 and 3 November full scans found 10 ECUs, fault codes were read with their texts, live data and an A/C test were recorded. Release: [v1.0](https://github.com/Aleksei327/ESP32-C5-OBD2-Scanner/releases/tag/v1.0).
 
-![Board v1, 3D view](DOCS/images/board-3d-front.png)
+![The scanner in its OBD2 enclosure](DOCS/images/photo-assembled.jpg)
+
+## What works
+
+- **Hardware:** single-sided 40 × 60 mm home-etched board in an OBD2 enclosure. Measured: on the car's OBD socket 13.4 V engine off and 14.4 V running; on the bench 4.95 V after the LM2596 and 4.83 V at the XIAO. The battery voltage reads within 0.05 V. Both CAN channels pass the self-test; the transmitters stay off in hardware until the firmware enables them.
+- **Firmware** (ESP-IDF 6.1): Wi-Fi access point with its own password, WebSocket protocol, both CAN channels (OBD 6/14 and 3/8), ISO-TP with the PSA "response pending" handled, bus monitor, battery voltage, USB console with a self-test.
+- **App 0.1.5** (Android): auto scan of every ECU in the knowledge base; ECU model recognised by part number; fault codes with texts from PSA-RE, the generic SAE list and, if built locally, the PSA code list in Russian and English; fault clearing; identification, live data, settings (read only); gauges, numbers and charts; bus monitor; PDF report. Scans are saved on the phone with a history (10 per car), a single module can be rescanned, and the garage and saved scans open without the adapter. The phone keeps its mobile internet while on the adapter's Wi-Fi.
+- **Remote work:** a computer at home reaches the adapter at the car through the phone and a Cloudflare tunnel; `remote/scan.py` writes a full read-only scan to a report.
+- **Simulator:** a C3 II in Python, to develop and test the app without the car.
+
+Next: CAN-FD transceivers in board v2, and more cars through the knowledge base.
 
 ## The app
 
@@ -16,6 +26,14 @@ A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, togethe
 | ![Gauges, dark theme](DOCS/images/app-gauges-dark.png) | ![Bus monitor](DOCS/images/app-bus-monitor.png) | ![Settings, dark theme](DOCS/images/app-settings-dark.png) |
 
 App 0.1.3 in English. For these screenshots it is connected to the adapter simulator ([`sim/`](sim/README.md)), not to the car, so the ECUs and values are simulated.
+
+## The board
+
+| | | |
+| --- | --- | --- |
+| ![Copper side, home-etched and tinned](DOCS/images/photo-copper.jpg) | ![Copper side at an angle](DOCS/images/photo-copper-angle.jpg) | ![Board v1, 3D view](DOCS/images/board-3d-front.png) |
+
+The real board from the copper side (two SN65HVD230, the LM2596 and the SMD parts are on this side) and the KiCad 3D view of the component side. Schematic and layout: [`hardware/scaner_v1/`](hardware/scaner_v1/README.md).
 
 ## Key decisions
 
@@ -58,7 +76,7 @@ PDF exports: [schematic](hardware/scaner_v1/build/scaner_v1.pdf), [placement and
 - Full diagnostics run on pins **3/8** (Diag-on-CAN, 500 kbit/s) through the BSI. Pins **6/14** only give legislated engine OBD-II.
 - Protocols: PSA-style KWP2000 (almost every ECU of the C3 II) and UDS, both over CAN (ISO-TP). The app finds out by itself which one an ECU speaks and recognises the ECU model by its part number.
 - ECU addresses (request:response): BSI `752:652`, engine `6A8:688`, ABS/ESP `6AD:68D`, airbag `744:644`, instrument cluster `75F:65F`.
-- On our C3 II 1.4 KFT the engine ECU is a Valeo V34 (KWP, session `81`). Answering: BSI, engine, ABS MK70, power steering, steering-column switches, instrument cluster, display, radio, airbag and the battery sensor.
+- On our C3 II 1.4 KFT the engine ECU is a Valeo V34 (KWP, session `81`). Answering: BSI, engine, ABS MK70, power steering, steering-column switches, instrument cluster, display, radio, airbag, seat-belt indicator and the battery sensor (the last one often answers "busy" or stays silent).
 - Terminators: pins 6–14 already have both in the car (57 Ω), pins 3–8 only the BSI one (128 Ω), so the board has R8 fitted and R7 left out.
 
 ## Rules
