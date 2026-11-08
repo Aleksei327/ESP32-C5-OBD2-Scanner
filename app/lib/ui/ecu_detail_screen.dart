@@ -345,9 +345,10 @@ class _FaultsTabState extends State<_FaultsTab> {
     if (diag == null) return;
     setState(() => _busy = true);
     Object? err;
+    String? how;
     try {
       await diag.attach(widget.def, savedEcu(app, widget.def));
-      await diag.clearFaults(widget.def);
+      how = await diag.clearFaults(widget.def);
     } catch (e) {
       err = e;
     }
@@ -356,7 +357,12 @@ class _FaultsTabState extends State<_FaultsTab> {
     await widget.onRescan?.call();
     if (mounted) {
       setState(() => _busy = false);
-      if (err != null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(diagError(err, t))));
+      if (err != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(diagError(err, t))));
+      } else if (how != null && how != '14 FF 00') {
+        // обычная команда не прошла, сработал запасной способ — показываем какой
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.clearedVia(how))));
+      }
     }
   }
 

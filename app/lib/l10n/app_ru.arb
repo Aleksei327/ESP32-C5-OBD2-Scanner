@@ -317,5 +317,14 @@
         "type": "String"
       }
     }
-  }
+  },
+  "clearedVia": "Стёрто запасным способом: {how}",
+  "@clearedVia": {
+    "placeholders": {
+      "how": {
+        "type": "String"
+      }
+    }
+  },
+  "errWifiOff": "На телефоне выключен Wi-Fi. Включи его — мобильный интернет при этом останется."
 }

@@ -213,5 +213,7 @@
   "nrcSecurity": "access denied",
   "nrcSession": "not available in this session",
   "nrcOther": "refused",
-  "errNrc": "The module refused: {why} (code {code})"
+  "errNrc": "The module refused: {why} (code {code})",
+  "clearedVia": "Cleared with a fallback: {how}",
+  "errWifiOff": "Wi-Fi is off on the phone. Turn it on; mobile internet keeps working."
 }

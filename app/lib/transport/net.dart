@@ -28,6 +28,16 @@ class Net {
   /// Подключиться к Wi-Fi адаптера как к сети только этого приложения (Android 10+): интернет
   /// всего телефона остаётся на мобильных данных. [ssid] на «-» — любая сеть с таким началом имени.
   /// false — отказ в окне Android или сеть не нашлась. Не Android — делать нечего, true.
+  /// Включён ли Wi-Fi на телефоне (без него к адаптеру не подключиться). Не Android — true.
+  static Future<bool> wifiEnabled() async {
+    if (!_android) return true;
+    try {
+      return await _m.invokeMethod<bool>('wifiEnabled') ?? true;
+    } catch (_) {
+      return true; // не знаем — пусть дальше скажет joinWifi
+    }
+  }
+
   static Future<bool> joinWifi(String ssid, String pass) async {
     if (!_android) return true;
     try {

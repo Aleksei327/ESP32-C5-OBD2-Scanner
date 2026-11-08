@@ -1,3 +1,4 @@
+import '../kb/bits.dart' show hexStr;
 import '../kb/knowledge_base.dart';
 import '../transport/adapter_client.dart';
 import '../transport/diag.dart';
@@ -357,7 +358,48 @@ class DiagService {
   }
 
   Future<List<Dtc>> readFaults(EcuDef d) => _run(link(d), (p) => p.readDtcs());
-  Future<void> clearFaults(EcuDef d) => _run(link(d), (p) => p.clearDtcs());
+  /// Сброс ошибок; ответ — каким способом стёрлось. Блок KWP отказал «условия не выполнены
+  /// или нарушен порядок» (0x22) — запасные способы: свежий сеанс → чтение ошибок → сброс
+  /// сразу следом; диагностический сеанс PSA (10 C0) → сброс; сброс группы двигателя (14 00 00).
+  /// В блок уходят только сеанс, чтение и та же стандартная команда сброса.
+  /// Не помогло ничего — ошибка первого отказа: она и есть причина.
+  Future<String> clearFaults(EcuDef d) async {
+    final l = link(d);
+    final NegativeResponse first;
+    try {
+      await _run(l, (p) => p.clearDtcs());
+      return '14 FF 00';
+    } on NegativeResponse catch (e) {
+      if (e.code != 0x22 || l.proto is! Kwp) rethrow;
+      first = e;
+      client.log?.call('clear ${d.node}: 14 FF 00 refused 0x22, try session + read + clear');
+    }
+    final kwp = l.proto as Kwp;
+    final open = l.kwpOpen == null ? '' : '${hexStr(l.kwpOpen!)} → ';
+    Future<String?> attempt(String name, Future<void> Function() steps) async {
+      try {
+        await _ready(l);
+        if (l.kwpOpen != null) await kwp.open(l.kwpOpen!);
+        await steps();
+        l._last = DateTime.now();
+        return name;
+      } on NegativeResponse catch (e) {
+        client.log?.call('clear ${d.node}: $name refused 0x${e.code.toRadixString(16)}');
+        return null;
+      }
+    }
+
+    return await attempt('${open}17 FF 00 → 14 FF 00', () async {
+          await kwp.readDtcs();
+          await kwp.clearDtcs();
+        }) ??
+        await attempt('${open}10 C0 → 14 FF 00', () async {
+          await kwp.ask(const [0x10, 0xC0]);
+          await kwp.clearDtcs();
+        }) ??
+        await attempt('${open}14 00 00', () => kwp.ask(const [0x14, 0x00, 0x00])) ??
+        (throw first);
+  }
 
   ({String text, bool generic, String? check})? dtcInfo(EcuDef d, Dtc dtc, String lang) =>
       dtcInfoFor(kb, d, link(d).model, dtc, lang);

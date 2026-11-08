@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Handler
@@ -38,6 +39,7 @@ import java.util.concurrent.TimeUnit
  */
 class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAwake: (Boolean) -> Unit) {
     private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     private val main = Handler(Looper.getMainLooper())
     private var sink: EventChannel.EventSink? = null
 
@@ -55,6 +57,7 @@ class NetBridge(context: Context, messenger: BinaryMessenger, private val keepAw
             when (call.method) {
                 "bindForHost" -> result.success(bindForHost(call.argument<String>("host") ?: ""))
                 "joinWifi" -> joinWifi(call.argument<String>("ssid") ?: "", call.argument<String>("pass") ?: "", result)
+                "wifiEnabled" -> result.success(wifi.isWifiEnabled)
                 "remoteStart" -> {
                     remoteStart(call.argument<String>("adapter") ?: "", call.argument<String>("relay") ?: "")
                     result.success(null)

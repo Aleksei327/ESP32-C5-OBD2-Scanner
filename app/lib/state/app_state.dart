@@ -7,6 +7,7 @@ import '../kb/knowledge_base.dart';
 import '../kb/sensors.dart';
 import '../theme.dart';
 import '../transport/adapter_client.dart';
+import '../transport/diag_log.dart';
 import '../transport/net.dart';
 import 'diag_service.dart';
 import 'garage.dart';
@@ -210,6 +211,8 @@ class AppState extends ChangeNotifier {
   static Future<AppState> create() async {
     final s = AppState(await SharedPreferences.getInstance());
     await s.loadScans();
+    await DiagLog.instance.init();
+    s.client.log = DiagLog.instance.add;
     return s;
   }
 
@@ -265,6 +268,10 @@ class AppState extends ChangeNotifier {
     connectError = null;
     notifyListeners();
     try {
+      if (wifiPass.isNotEmpty && !await Net.wifiEnabled()) {
+        connectError = 'wifi_off';
+        return;
+      }
       if (wifiPass.isNotEmpty && !await Net.joinWifi(wifiSsid, wifiPass)) {
         connectError = 'wifi_join';
         return;

@@ -36,6 +36,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
   /// Человеческий текст вместо «TimeoutException after 0:00:06…».
   String _friendly(AppLocalizations t, String err) {
     if (err == 'wifi_join') return t.errWifi;
+    if (err == 'wifi_off') return t.errWifiOff;
     if (err.contains('Timeout')) return t.errTimeout;
     if (err.contains('refused')) return t.errRefused;
     return t.connectFailed(err);

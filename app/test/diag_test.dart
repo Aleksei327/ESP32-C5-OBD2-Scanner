@@ -123,6 +123,53 @@ void main() {
     expect(g.real, isEmpty);
   });
 
+  test('сброс ошибок: на отказ 0x22 — сеанс, чтение, сброс; потом группа двигателя', () async {
+    var clears = 0;
+    final fake = FakeClient((tx, req) {
+      if (tx != 0x6A8) return null;
+      final h = hexStr(req).replaceAll(' ', '');
+      if (h == '81') return [0xC1, 0xD0, 0x8F];
+      if (h == '17FF00') return [0x57, 0x00];
+      if (h == '14FF00') {
+        clears++;
+        return [0x7F, 0x14, 0x22]; // этот блок «все» не стирает
+      }
+      if (h == '140000') return [0x54, 0x00, 0x00];
+      return [0x7F, req.first, 0x31];
+    });
+    final kb = loadKb();
+    final diag = DiagService(fake, kb);
+    final eng = kb.ecus.firstWhere((e) => e.node == 'CMM');
+    await diag.rescan(eng); // как после автоскана: сеанс 81 открыт
+    fake.sent.clear();
+    expect(await diag.clearFaults(eng), '81 → 14 00 00');
+    expect(clears, 2); // 10 C0 этот блок не знает — до сброса в той попытке не дошло
+    expect(fake.sent, [
+      '6A8:14FF00', '6A8:81', '6A8:17FF00', '6A8:14FF00', '6A8:81', '6A8:10C0', //
+      '6A8:81', '6A8:140000',
+    ]);
+
+    // как на машине: 0x22 на всё, 14 00 00 — «не поддерживается»; в итоге причина — первый отказ
+    final car = FakeClient((tx, req) {
+      if (tx != 0x6A8) return null;
+      final h = hexStr(req).replaceAll(' ', '');
+      if (h == '81') return [0xC1, 0xD0, 0x8F];
+      if (h == '17FF00') return [0x57, 0x00];
+      if (h == '10C0') return [0x50, 0xC0];
+      if (h == '140000') return [0x7F, 0x14, 0x12];
+      return [0x7F, req.first, 0x22];
+    });
+    final d3 = DiagService(car, kb);
+    await d3.rescan(eng);
+    expect(() => d3.clearFaults(eng), throwsA(isA<NegativeResponse>().having((e) => e.code, 'code', 0x22)));
+
+    // другой отказ — без запасных способов, сразу ошибка
+    final strict = FakeClient((tx, req) => tx == 0x6A8 ? (req.first == 0x81 ? [0xC1, 0xD0, 0x8F] : [0x7F, req.first, 0x33]) : null);
+    final d2 = DiagService(strict, kb);
+    await d2.rescan(eng);
+    expect(() => d2.clearFaults(eng), throwsA(isA<NegativeResponse>().having((e) => e.code, 'code', 0x33)));
+  });
+
   test('биты в нотации PSA-RE', () {
     final p = [0x03, 0x20, 0x8D, 0xFE, 0x41, 0x42];
     expect(Bits.parse('1.7-2.0').uint(p), 800);

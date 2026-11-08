@@ -77,6 +77,9 @@ class AdapterClient {
     });
   }
 
+  /// Куда писать обмен с блоками (DiagLog); null — не писать.
+  void Function(String line)? log;
+
   /// Как мы открыли шины: true — на передачу, false — только слушать; закрытой нет в карте.
   /// Экраны открывают и закрывают шины сами, диагностика по этой карте открывает свою заново.
   final busWrite = <String, bool>{};
@@ -84,11 +87,13 @@ class AdapterClient {
   Future<void> openBus(String bus, {bool listen = true, int bitrate = 500000}) async {
     await call('bus.open', args: {'bus': bus, 'listen': listen, 'bitrate': bitrate});
     busWrite[bus] = !listen;
+    log?.call('bus $bus open ${listen ? 'listen' : 'write'}');
   }
 
   Future<void> closeBus(String bus) async {
     await call('bus.close', args: {'bus': bus});
     busWrite.remove(bus);
+    log?.call('bus $bus close');
   }
 
   Future<void> monitor(String bus, {String mode = 'summary', List<String>? ids}) =>
@@ -101,6 +106,18 @@ class AdapterClient {
   /// или кидает [AdapterError], если не ответил адаптер (timeout, listen_only…).
   Future<List<int>> request(String bus, int tx, int rx, List<int> data,
       {int timeoutMs = 1500}) async {
+    final head = '$bus ${tx.toRadixString(16).toUpperCase()} ${_hex(data).toUpperCase()}';
+    try {
+      final r = await _request(bus, tx, rx, data, timeoutMs);
+      log?.call('$head -> ${_hex(r).toUpperCase()}');
+      return r;
+    } catch (e) {
+      log?.call('$head !! $e');
+      rethrow;
+    }
+  }
+
+  Future<List<int>> _request(String bus, int tx, int rx, List<int> data, int timeoutMs) async {
     final r = await call('isotp.req',
         args: {
           'bus': bus,
