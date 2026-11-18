@@ -18,7 +18,7 @@
 | `scaner_v1.kicad_sch`, `scaner_v1.kicad_pcb`, `scaner_v1.kicad_pro` | схема, плата, проект (правила: дорожка 0,8 мм, зазор 0,4 мм) |
 | `scaner.pretty/` | свои посадочные места: XIAO ESP32-C5 на двух гнёздах 1×7, стабилитрон DO-35 с шагом 5,08, контур корпуса OBD2 |
 | `scaner.3dshapes/` | свои 3D-модели (VRML) для деталей, которых нет в библиотеке KiCad |
-| `build/*.pdf` | схема, расстановка с медью, нижняя медь 1:1 для травления |
+| `build/*.pdf` | схема (`scaner_v1.pdf`, английская копия — `scaner_v1_en.pdf`), расстановка с медью, нижняя медь 1:1 для травления |
 | `tools/` | скрипты на Python, которые всё генерируют (см. ниже) |
 
 ## Плата генерируется, а не рисуется руками
@@ -31,6 +31,7 @@ python tools/check_netlist.py        # ERC и сверка нетлиста с t
 "C:\Program Files\KiCad\10.0\bin\python.exe" tools/gen_pcb.py       # расстановка (таблица PLACE), правила площадок, запреты
 "C:\Program Files\KiCad\10.0\bin\python.exe" tools/hand_route.py    # дорожки из tools/routes.py, заливка земли, DRC
 python tools/gen_3d.py               # 3D-модели в scaner.3dshapes/
+python tools/export_sch_en.py        # английская схема -> build/scaner_v1_en.pdf (сама схема остаётся русской)
 ```
 
 - `routes.py` — каждая дорожка списком точек (или ссылок `ДЕТАЛЬ.площадка`) с шириной.

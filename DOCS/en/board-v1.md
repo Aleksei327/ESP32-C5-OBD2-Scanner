@@ -4,7 +4,7 @@
 
 **Goal:** the first complete board of my own, fitted inside an OBD2 enclosure with a built-in connector. Plug it into the C3, read legislated OBD-II on channel A and identify the BSI over Diag-on-CAN on channel B.
 
-Components: [XIAO ESP32-C5 board](xiao-esp32c5.md), [SN65HVD230 transceiver](can-sn65hvd230.md), [LM2596 DC-DC](dc-dc-5v.md), [input protection](power-protection.md). KiCad project: [hardware/scaner_v1](../../hardware/scaner_v1/).
+Components: [XIAO ESP32-C5 board](xiao-esp32c5.md), [SN65HVD230 transceiver](can-sn65hvd230.md), [LM2596 DC-DC](dc-dc-5v.md), [input protection](power-protection.md). KiCad project: [hardware/scaner_v1](../../hardware/scaner_v1/), schematic in [PDF](../../hardware/scaner_v1/build/scaner_v1_en.pdf).
 
 ![Board v1, 3D view](../images/board-3d-front.png)
 

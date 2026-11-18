@@ -18,7 +18,7 @@ Top row: KiCad 3D. Bottom row: the board as built, in its enclosure and from the
 | `scaner_v1.kicad_sch`, `scaner_v1.kicad_pcb`, `scaner_v1.kicad_pro` | schematic, board, project (design rules: 0.8 mm tracks, 0.4 mm clearance) |
 | `scaner.pretty/` | project footprints: XIAO ESP32-C5 on two 1×7 sockets, DO-35 zener at 5.08 mm pitch, OBD2 enclosure outline |
 | `scaner.3dshapes/` | hand-written 3D models (VRML) for parts missing from the KiCad library |
-| `build/*.pdf` | schematic, placement with copper, bottom copper 1:1 for etching |
+| `build/*.pdf` | schematic (`scaner_v1_en.pdf` in English, `scaner_v1.pdf` in Russian), placement with copper, bottom copper 1:1 for etching |
 | `tools/` | Python scripts that generate everything (see below) |
 
 ## The board is generated, not drawn by hand
@@ -31,6 +31,7 @@ python tools/check_netlist.py        # ERC and netlist check against tools/expec
 "C:\Program Files\KiCad\10.0\bin\python.exe" tools/gen_pcb.py       # placement (PLACE table), pad rules, keep-outs
 "C:\Program Files\KiCad\10.0\bin\python.exe" tools/hand_route.py    # tracks from tools/routes.py, ground pour, DRC
 python tools/gen_3d.py               # 3D models into scaner.3dshapes/
+python tools/export_sch_en.py        # English schematic -> build/scaner_v1_en.pdf (the schematic itself stays Russian)
 ```
 
 - `routes.py` — every track as a list of points (or `REF.pad` references) with its width.

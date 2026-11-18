@@ -69,7 +69,7 @@ The real board from the copper side (two SN65HVD230, the LM2596 and the SMD part
 - [Adapter ↔ app protocol](DOCS/en/protocol.md)
 - [Parts list](DOCS/en/parts-list.md)
 
-PDF exports: [schematic](hardware/scaner_v1/build/scaner_v1.pdf), [placement and copper](hardware/scaner_v1/build/pcb_placement.pdf), [bottom copper 1:1 for etching](hardware/scaner_v1/build/pcb_bottom_cu.pdf).
+PDF exports: [schematic](hardware/scaner_v1/build/scaner_v1_en.pdf), [placement and copper](hardware/scaner_v1/build/pcb_placement.pdf), [bottom copper 1:1 for etching](hardware/scaner_v1/build/pcb_bottom_cu.pdf).
 
 ## What is known about the C3 (PSA, AEE2004/2010 architecture)
 
