@@ -10,6 +10,7 @@ import 'package:scaner_app/state/garage.dart';
 import 'package:scaner_app/state/scan_store.dart';
 import 'package:scaner_app/transport/adapter_client.dart';
 import 'package:scaner_app/transport/diag.dart';
+import 'package:scaner_app/kb/live_table.dart';
 
 /// Адаптер-подставка: отвечает по таблице (шина, адрес, запрос) → ответ, остальное — молчание.
 class FakeClient extends AdapterClient {
@@ -32,6 +33,104 @@ class FakeClient extends AdapterClient {
 KnowledgeBase loadKb() => KnowledgeBase(jsonDecode(File('assets/kb/c3_ii.json').readAsStringSync()) as Map<String, dynamic>);
 
 void main() {
+  test('BSI refuses ambiguous tables and unknown field widths', () {
+    expect(() => LiveTable.parse([1, 26, 26]), throwsFormatException);
+    expect(() => LiveTable.parse([1, 26, 0xff, 1, 27]), throwsFormatException);
+    final bsi = loadKb().ecus.firstWhere((d) => d.node == 'BSI').models.first;
+    final record = bsi.recordsFor('A7_V1_2', 'live').singleWhere((r) => r.label == 'C1');
+    expect(() => LiveTable.parse([1, 240]).decode(record, [0]), throwsFormatException);
+  });
+
+  test('BSI reads advertised indexes once, validates the record echo and packed lengths', () async {
+    final kb = loadKb();
+    final bsi = kb.ecus.firstWhere((d) => d.node == 'BSI');
+    var busy = true;
+    var wrongEcho = false;
+    var shortData = false;
+    final client = FakeClient((tx, req) {
+      final key = hexStr(req).replaceAll(' ', '');
+      if (key == '21C1' && busy) {
+        busy = false;
+        return [0x7f, 0x21, 0x21];
+      }
+      // pages as the car sends them: 75 C0 <80 | FF last> 00 00 <page> <n> <data> <2 check bytes>
+      return switch (key) {
+        '35C000000111' => [0x75, 0xc0, 0x80, 0, 0, 1, 3, 1, 0, 26, 0x12, 0x34],
+        '35C000000211' => [0x75, 0xc0, 0x80, 0, 0, 2, 5, 27, 28, 0xff, 5, 7, 0x12, 0x34],
+        '35C000000311' => [0x75, 0xc0, 0xff, 0, 0, 3, 3, 0xff, 0x0b, 0x1e, 0x12, 0x34],
+        '21C1' when shortData => [0x61, 0xc1, 1],
+        '21C1' => [0x61, wrongEcho ? 0xc2 : 0xc1, 1, 0, 97, 1],
+        _ => null,
+      };
+    });
+    final diag = DiagService(client, kb);
+    diag.link(bsi)
+      ..model = bsi.models.first
+      ..variant = 'A7_V1_2';
+    final recs = diag.records(bsi, 'live');
+    final ac = recs.singleWhere((r) => r.label == 'C1');
+    final values = await diag.readRecord(bsi, ac);
+    expect(values.map((v) => v.$2.number), [1, 0, closeTo(9.7, .00001), 1]);
+    expect(values[1].$1.key, 'STATUS_AIR_CONDITIONING_COMPRESSOR_CLUTCH');
+    expect(await diag.readRecord(bsi, recs.singleWhere((r) => r.label == 'C8')), isEmpty);
+    expect(client.sent.where((s) => s.contains(':35')).length, 3);
+    expect(client.sent.where((s) => s.endsWith(':21C8')), isEmpty);
+    expect((await diag.link(bsi).liveTable)!.groups, {
+      0xc1: [0, 26, 27, 28],
+      0xc5: [7],
+      0xcb: [0x1e], // с последней страницы
+    });
+    wrongEcho = true;
+    await expectLater(diag.readRecord(bsi, ac), throwsFormatException);
+    shortData = true;
+    await expectLater(diag.readRecord(bsi, ac), throwsFormatException);
+  });
+
+  test('BSI table exactly as the C3 II sent it (21.11.2026)', () async {
+    const pages = [
+      '75C08000000111002C473F4015162528292A3335363738429F0B',
+      '75C080000002114345494A5E03050C0F21232F3031323B3C5BA8',
+      '75C080000003113E41444860FF01051B1F141516171819008A4C',
+      '75C080000004110103040708090C0D0E101A1C1D1EFF0250D602',
+      '75C0800000051131393A4851525354636465666768696A6B0C82',
+      '75C08000000611595A5B5F60615C5D5E02030405090A191A979D',
+      '75C080000007111C1D2324262728292C2D32383B3C3D3E3F754A',
+      '75C08000000811474F5556FF0512343D3F4F0C0D0F101314B0D2',
+      '75C08000000911161C2021242526282A37384142494A4B4C9C3E',
+      '75C08000000A114EFF060406FF070F10292A2F0406080A0CE9E5',
+      '75C08000000B110D0E14161A1C1E2023282EFF084C2603045D14',
+      '75C08000000C1105060708090A0B0C1F202D2E2F31323A3B1483',
+      '75C08000000D113C3D4041424E5054FF093E451E2B2C2E3045F4',
+      '75C08000000E113F414648491B1C2324262D477402141F3160CF',
+      '75C08000000F11424344FF0A08010409FF0B1EFF0D0F2B03DC98',
+      '75C0FF0000100E070B0C0D1113141516171A1B1E2EBB37',
+    ];
+    List<int> hex(String s) => [for (var i = 0; i < s.length; i += 2) int.parse(s.substring(i, i + 2), radix: 16)];
+    final asked = <int>[];
+    final table = await LiveTable.read((req) async {
+      asked.add(req[4]);
+      return hex(pages[req[4] - 1]);
+    });
+    expect(asked, List.generate(16, (i) => i + 1));
+    expect(table.groups.keys, [0xc0, 0xc1, 0xc2, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcd]);
+    expect(table.groups[0xc1],
+        [0x05, 0x1b, 0x1f, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x00, 0x01, 0x03, 0x04, 0x07, 0x08, 0x09, 0x0c, 0x0d, 0x0e, 0x10, 0x1a, 0x1c, 0x1d, 0x1e]);
+    expect(table.groups[0xcd]!.last, 0x2e); // последняя страница тоже с данными
+
+    // C1: три 16-битных, шесть байтовых, 15 битов → 14 байт
+    final bsi = loadKb().ecus.firstWhere((d) => d.node == 'BSI').models.first;
+    final c1 = bsi.recordsFor('A51_V1', 'live').singleWhere((r) => r.label == 'C1');
+    final payload = List.filled(14, 0)
+      ..[3] = 44 // давление хладагента 4,4 бар
+      ..[12] = 0x01; // первый битовый — команда компрессора
+    final v = {for (final (p, x) in table.decode(c1, payload)) p.key: x.number};
+    expect(v.length, 24);
+    expect(v['REFRIGERANT_PRESSURE'], closeTo(4.4, 1e-9));
+    expect(v['AIR_CON_COMPRESSOR_COMMAND'], 1);
+    expect(v['STATUS_AIR_CONDITIONING_COMPRESSOR_CLUTCH'], 0);
+    expect(() => table.decode(c1, List.filled(13, 0)), throwsFormatException);
+  });
+
   test('коды ошибок: UDS (3 байта) и KWP (2 байта + состояние)', () {
     expect(Dtc([0xC1, 0x00, 0x00], 0x08).code, 'U0100');
     expect(Dtc([0x01, 0x30, 0x00], 0x09).code, 'P0130');

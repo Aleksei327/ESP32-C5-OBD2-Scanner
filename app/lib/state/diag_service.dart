@@ -1,5 +1,6 @@
 import '../kb/bits.dart' show hexStr;
 import '../kb/knowledge_base.dart';
+import '../kb/live_table.dart';
 import '../transport/adapter_client.dart';
 import '../transport/diag.dart';
 import '../transport/obd.dart';
@@ -24,6 +25,7 @@ class EcuLink {
   DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
 
   EcuModel? model;
+  Future<LiveTable>? liveTable;
   bool modelChosen = false; // выбрана руками, а не опознана
   String? part;
   String? variant;
@@ -109,6 +111,7 @@ class DiagService {
   }
 
   Future<EcuLink> _scanOne(EcuLink l) async {
+    l.liveTable = null;
     l.dtcs = [];
     try {
       l.answered = await _probe(l);
@@ -263,6 +266,7 @@ class DiagService {
   /// Пользователь сам указал модель блока (опознать не вышло).
   void chooseModel(EcuDef d, EcuModel m) {
     final l = link(d);
+    l.liveTable = null;
     l.model = m;
     l.modelChosen = true;
     l.variant = null;
@@ -283,6 +287,14 @@ class DiagService {
 
   Future<List<(Param, ParamValue)>> readRecord(EcuDef d, Record r) async {
     final l = link(d);
+    if (r.isIndexed) {
+      final table = await (l.liveTable ??= _run(l, (p) => LiveTable.read(p.ask)).catchError((Object e) {
+        l.liveTable = null;
+        throw e;
+      }));
+      if (table.groups[r.id]?.isNotEmpty != true) return [];
+      return table.decode(r, await _run(l, (p) => p.read(r.req)));
+    }
     final payload = await _run(l, (p) => p.read(r.req));
     return r.decode(payload, l.variant);
   }

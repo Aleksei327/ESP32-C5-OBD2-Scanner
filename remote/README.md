@@ -12,6 +12,8 @@ adapter ──Wi-Fi── phone ──mobile internet── Cloudflare ── re
 - **Computer**: `relay.py` is a relay on `127.0.0.1:8790`. From outside it is reached through a free Cloudflare tunnel (`cloudflared`, no account); the computer needs no incoming connections, any internet works, even a phone hotspot.
 - **The key** is created anew on every `relay.py` start: 8 characters without 0/o and 1/l/i, so it can be typed by hand. Without it nobody can connect to the relay. The tunnel address is new every time as well. The tunnel runs HTTP/2 over TCP: QUIC kept dropping on the home network.
 
+The BSI scan reads the live index table. The JSON and report include values or the reason a group was skipped. The JSON log retains the raw exchanges.
+
 ## How to run
 
 1. On the computer:

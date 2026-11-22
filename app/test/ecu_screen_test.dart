@@ -116,7 +116,7 @@ void main() {
 
     await tester.tap(find.text('Данные'));
     await frames();
-    expect(find.textContaining('C0 ·'), findsOneWidget);
+    expect(find.text('Группа C0'), findsOneWidget); // у V46 названий групп нет — только номер
     expect(find.textContaining('800'), findsWidgets);
     expect(find.textContaining('90 °C'), findsWidgets);
 

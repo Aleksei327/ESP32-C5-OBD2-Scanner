@@ -10,6 +10,16 @@ Also: a garage of cars recognised by VIN with up to 5 photos per car, two themes
 
 Scans are saved on the phone, the last 10 per car. The Modules tab shows the latest one (or any from the history) and never starts a scan by itself: a new auto scan is started by its button, and a single module can be scanned again from its own screen. Rescanning a module or clearing its faults adds a new entry to the history, so the state before and after stays visible. The garage and saved scans can be opened without the adapter; live data, gauges and the bus monitor need it. Fault texts are not stored with the scan, they are looked up when shown, so better translations also show up in old scans.
 
+## BSI/BSM live readings in 0.1.7
+
+With the adapter connected, open **Modules → BSI → Data** and choose a group. The C3 II definitions cover power, A/C, pedals, lights, alarm, locks, sensors, consumption, warnings, windows and wipers. BSI and BSM readings share the diagnostic endpoint `752/652`. Available fields depend on ECU software and equipment.
+
+The app requests the C0-family table with `35 C0 00 00 nn 11`, starting at page 01. Each page comes back as `75 C0 <80, or FF on the last page> 00 00 nn <length> <data> <2 check bytes>`, and the last page carries data too. It then reads the selected group with `21 xx`, following the advertised index order, least-significant-bit-first flags and byte-aligned multibyte fields. The table is cached for the connection and cleared on rescan. The diagnostic log retains the exchanges. Unadvertised groups show no data. Unknown indexes, incorrect payload lengths and unexpected record identifiers produce errors. A busy response on a record read allows up to two retries.
+
+In **Air conditioning**, compare the driver request, authorisation, compressor command, reported clutch status and cut-off conditions while toggling A/C. The app displays the fields advertised by the ECU. Clutch status reflects the electronics’ view. Coil voltage and actual rotation require independent checks. Both relay states in the Valeo V34 engine record refer to the radiator fan.
+
+The first build of 0.1.7 treated the page header as table data and failed on every group. On 21.11.2026 the car's BSI returned its table (16 pages, groups C0–C2, C5–CB and CD). The reader was fixed against those exact pages, and the simulator now sends them. On 22.11.2026 the car's C1 group decoded consistently. With A/C on, the engine's authorisation came first, then the compressor command and the clutch status. Temperatures and pressure matched the engine's own readings, which confirms the low-bit-first packing.
+
 ## Build and run
 
 Requires Flutter 3.44 (Dart 3.12) and the Android SDK.

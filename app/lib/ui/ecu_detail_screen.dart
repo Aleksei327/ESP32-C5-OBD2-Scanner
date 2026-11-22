@@ -511,7 +511,7 @@ class _LiveTab extends StatefulWidget {
 class _LiveTabState extends State<_LiveTab> {
   int _sel = 0;
   List<(Param, ParamValue)>? _vals;
-  bool _failed = false;
+  Object? _error;
   bool _run = true;
   int _gen = 0; // смена группы обрывает старый опрос
   bool _attached = false;
@@ -544,11 +544,15 @@ class _LiveTabState extends State<_LiveTab> {
         if (!mounted || gen != _gen) return;
         setState(() {
           _vals = v;
-          _failed = false;
+          _error = null;
         });
-      } catch (_) {
+      } catch (e) {
         if (!mounted || gen != _gen) return;
-        setState(() => _failed = true);
+        setState(() {
+          _error = e;
+          _vals = null;
+        });
+        if (_recs[_sel].isIndexed && (e is FormatException || e is NegativeResponse && e.code != 0x21)) return;
         await Future.delayed(const Duration(seconds: 1));
       }
       await Future.delayed(const Duration(milliseconds: 300));
@@ -559,7 +563,7 @@ class _LiveTabState extends State<_LiveTab> {
     setState(() {
       _sel = i;
       _vals = null;
-      _failed = false;
+      _error = null;
     });
     _poll();
   }
@@ -601,7 +605,13 @@ class _LiveTabState extends State<_LiveTab> {
           itemCount: recs.length,
           separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (_, i) => ChoiceChip(
-            label: Text('${recs[i].label} · ${recs[i].params.length}', style: mono(context, 13)),
+            // «C1 · Кондиционер», а где названия нет — «Группа C1»: внутри всё видно плитками ниже
+            label: Text(
+                switch (recs[i].titleFor(lang)) {
+                  final title? => '${recs[i].label} · $title',
+                  null => t.liveGroup(recs[i].label),
+                },
+                style: mono(context, 13)),
             selected: i == _sel,
             onSelected: (_) => _select(i),
           ),
@@ -609,7 +619,8 @@ class _LiveTabState extends State<_LiveTab> {
       ),
       Expanded(
         child: vals == null
-            ? Center(child: _failed ? Text(t.readFailed, style: TextStyle(color: p.textDim)) : const CircularProgressIndicator())
+            ? Center(child: _error != null ? Text(diagError(_error!, t), style: TextStyle(color: p.textDim)) : const CircularProgressIndicator())
+            : vals.isEmpty ? Center(child: Text(t.noData, style: TextStyle(color: p.textDim)))
             : GridView.count(
                 padding: const EdgeInsets.all(20),
                 crossAxisCount: 2,

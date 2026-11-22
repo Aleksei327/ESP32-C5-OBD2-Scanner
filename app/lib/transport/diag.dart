@@ -53,7 +53,21 @@ abstract class DiagProtocol {
   }
 
   /// Прочитать запись (21 LID или 22 DID): данные после эха номера записи.
-  Future<List<int>> read(List<int> req) async => (await ask(req)).sublist(req.length);
+  Future<List<int>> read(List<int> req) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final r = await ask(req);
+        if (r.length < req.length ||
+            !List.generate(req.length - 1, (i) => i + 1).every((i) => r[i] == req[i])) {
+          throw const FormatException('Unexpected diagnostic record identifier');
+        }
+        return r.sublist(req.length);
+      } on NegativeResponse catch (e) {
+        if (e.code != 0x21 || attempt >= 2) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+  }
 
   Future<List<Dtc>> readDtcs();
   Future<void> clearDtcs();

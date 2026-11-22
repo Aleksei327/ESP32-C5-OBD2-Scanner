@@ -143,9 +143,59 @@ def match_variant(pats, v):
 
 def record_applies(r, variant):
     vs = r.get('variants') or []
+    if r.get('indexed') and vs and variant is None:
+        return False
     if variant is None or not vs or match_variant(vs, variant):
         return True
     return any(not a.get('variants') or match_variant(a['variants'], variant) for a in r.get('alts') or [])
+
+
+async def live_table(ecu):
+    """Read the C0 family once, preserving groups that span multiple pages.
+
+    A page, as the C3 II's BSI answers (21.11.2026):
+    75 C0 <80, or FF on the last page> 00 00 <page> <n> <n data bytes> <2 check bytes>.
+    The last page carries data too."""
+    data = bytearray()
+    for page in range(1, 256):
+        response, err = await ecu.ask(f'35C00000{page:02X}11')
+        if (err or response is None or len(response) < 7 or response[0] != 0x75
+                or response[1] != 0xc0 or response[5] != page or len(response) < 7 + response[6]):
+            raise ValueError(err or 'invalid BSI parameter table')
+        data.extend(response[7:7 + response[6]])
+        if response[2] == 0xff:
+            groups = {}
+            for entry in data.split(b'\xff'):
+                if not entry:
+                    continue
+                lid = 0xc0 + entry[0]
+                indexes = list(entry[1:])
+                if lid > 0xcf or lid in groups or len(set(indexes)) != len(indexes):
+                    raise ValueError('invalid indices in BSI parameter table')
+                groups[lid] = indexes
+            return groups
+    raise ValueError('incomplete BSI parameter table')
+
+
+def indexed_params(record, indexes, payload_size):
+    params, offset = [], 0
+    for index in indexes:
+        field = record['indexed'].get(str(index))
+        if field is None:
+            raise ValueError(f'unknown BSI parameter #{index}')
+        width = field['width']
+        if width <= 0 or width > 8 and width % 8:
+            raise ValueError(f'unsupported BSI field width {width}')
+        if width >= 8 or offset % 8 + width > 8:
+            offset = (offset + 7) // 8 * 8
+        byte, low = offset // 8 + 1, offset % 8
+        bits = (f'{byte}.7-{byte + width // 8 - 1}.0' if width >= 8
+                else f'{byte}.{low + width - 1}-{byte}.{low}')
+        params.append(dict(field, bits=bits))
+        offset += width
+    if (offset + 7) // 8 != payload_size:
+        raise ValueError(f'BSI data length {payload_size} does not match parameter table ({(offset + 7) // 8})')
+    return params
 
 
 def record_params(r, variant):
@@ -217,7 +267,10 @@ class Link:
     async def send(self, bus, tx, rx, data, timeout_ms=READ_MS):
         """→ (ответ bytes | None, ошибка | None). Отказ блока (7F) — ответ, ошибка 'NRC xx'."""
         req = unhex(data)
-        if req[0] not in READ_SIDS:
+        # Fixed PSA read-only live-layout query, restricted to the BSI endpoint.
+        layout_query = (bus == 'B' and tx == '752' and rx == '652' and len(req) == 6
+                        and req[:4] == bytes.fromhex('35 C0 00 00') and req[4] > 0 and req[5] == 0x11)
+        if req[0] not in READ_SIDS and not layout_query:
             raise ValueError(f'сервис {req[0]:02X} не чтение — не отправляю')
         r = await self.call('isotp.req', timeout=timeout_ms / 1000 + 8, bus=bus, tx=tx, rx=rx, data=data,
                             timeout_ms=timeout_ms)
@@ -230,6 +283,8 @@ class Link:
         entry['resp'] = r['data']
         self.log.append(entry)
         if resp and resp[0] == (req[0] + 0x40) & 0xFF:
+            if req[0] in (0x21, 0x22) and resp[1:len(req)] != req[1:]:
+                return resp, 'unexpected record identifier'
             return resp, None
         if len(resp) >= 3 and resp[0] == 0x7F:
             return resp, f'NRC {resp[2]:02X}'
@@ -272,6 +327,12 @@ class Ecu:
         if self.proto == 'kwp' and self.open and time.monotonic() - self.last > KWP_IDLE:
             await self.link.send(self.bus, self.tx, self.rx, self.open, PROBE_MS)
         resp, err = await self.link.send(self.bus, self.tx, self.rx, data, timeout_ms)
+        if err == 'NRC 21' and data.startswith(('21', '22', '35C00000')):
+            for _ in range(2):
+                await asyncio.sleep(0.25)
+                resp, err = await self.link.send(self.bus, self.tx, self.rx, data, timeout_ms)
+                if err != 'NRC 21':
+                    break
         self.last = time.monotonic()
         return resp, err
 
@@ -534,20 +595,43 @@ async def scan(args):
                         x['text'] = dtc_text(model, extra, generic, x, psa, sae_p(d))
                 info['dtc'] = dtcs if dtcs is not None else {'err': err}
                 info['records'] = []
+                table, table_error = None, None
                 if model:
                     for kind in ('identification', 'config', 'live'):
                         for r in model.get('records') or []:
                             if r.get('kind', 'live') != kind or not record_applies(r, variant):
                                 continue
+                            # «C1 · Кондиционер», где у группы есть короткое название
+                            title = txt(r.get('title')) if r.get('title') else ''
+                            rec = {'req': r['req'], 'kind': kind,
+                                   'name': f"{r['req'][2:]} · {title}" if title else txt(r.get('name'))}
+                            indexes = None
+                            if 'indexed' in r:
+                                if table is None and table_error is None:
+                                    try:
+                                        table = await live_table(e)
+                                    except ValueError as ex:
+                                        table_error = str(ex)
+                                indexes = (table or {}).get(int(r['req'][2:], 16))
+                                if not indexes:
+                                    rec['err'] = table_error or 'not advertised by ECU'
+                                    info['records'].append(rec)
+                                    continue
                             resp, err = await e.ask(r['req'])
-                            rec = {'req': r['req'], 'kind': kind, 'name': txt(r.get('name'))}
                             if err or resp is None:
                                 rec['err'] = err
                             else:
                                 payload = resp[len(unhex(r['req'])):]
                                 rec['raw'] = payload.hex().upper()
                                 vals = []
-                                for prm in record_params(r, variant):
+                                try:
+                                    params = (indexed_params(r, indexes, len(payload)) if indexes is not None
+                                              else record_params(r, variant))
+                                except ValueError as ex:
+                                    rec['err'] = str(ex)
+                                    info['records'].append(rec)
+                                    continue
+                                for prm in params:
                                     if not Bits(prm['bits']).fits(payload):
                                         continue
                                     num, text = decode_param(prm, payload)

@@ -5,6 +5,8 @@
 Pretends to be the adapter (XIAO ESP32-C5) with a Citroën C3 II attached, so the app can be written and tested without hardware or a car.
 It speaks the protocol described in [DOCS/en/protocol.md](../DOCS/en/protocol.md).
 
+The BSI sends the live-group table exactly as the real C3 II returned it on 21.11.2026: 16 pages, groups C0–C2, C5–CB and CD. Group values are packed from that table by the PSA-RE rule. The A/C values copy the car's fault: the compressor is commanded, the clutch is reported off, and the pressure is 4.4 bar.
+
 ## Running
 
 ```sh

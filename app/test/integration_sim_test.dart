@@ -32,6 +32,14 @@ void main() {
 
     final bsi = answered['BSI']!;
     expect(bsi.dtcs.length, 2);
+    final climate = diag.records(bsi.def, 'live').singleWhere((r) => r.label == 'C1');
+    final climateValues = await diag.readRecord(bsi.def, climate);
+    // в симуляторе — таблица настоящей машины и её поломка: компрессор включён, муфта нет
+    final ac = {for (final (p, v) in climateValues) p.key: v.number};
+    expect(ac.length, 24);
+    expect(ac['AIR_CON_COMPRESSOR_COMMAND'], 1);
+    expect(ac['STATUS_AIR_CONDITIONING_COMPRESSOR_CLUTCH'], 0);
+    expect(ac['REFRIGERANT_PRESSURE'], closeTo(4.4, 1e-9));
     final info = await diag.identify(bsi.def);
     expect(info.vin, 'VF7SIMULATORC3001');
     expect(await diag.carVin(answered.values.toList()), 'VF7SIMULATORC3001');

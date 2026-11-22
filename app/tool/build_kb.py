@@ -224,7 +224,10 @@ def socket_addr(ecu):
 
 
 def param(key, p, tx):
-    out = {'key': key, 'bits': p['bits'], 'type': p.get('type', 'uint')}
+    out = {'key': key}
+    if 'bits' in p:
+        out['bits'] = p['bits']
+    out['type'] = p.get('type', 'uint')
     name = tx(p.get('comment') or p.get('display_name') or {}, key.replace('_', ' ').capitalize(), cat='param')
     out['name'] = name
     for src, dst in (('factor', 'factor'), ('offset', 'offset'), ('units', 'units')):
@@ -233,8 +236,14 @@ def param(key, p, tx):
     if p.get('byte_order') == 'little':
         out['le'] = True
     vals = p.get('values')
+    clutch_labels = {'STATUS_AIR_CONDITIONING_COMPRESSOR_CLUTCH': ('Муфта отключена', 'Муфта включена'),
+                     'REQUEST_IMMEDIATE_RELEASE_AIR_CONDITIONING': ('Отключение муфты не запрошено', 'Запрошено отключение муфты')}
     if isinstance(vals, dict) and vals:
         out['values'] = {str(int(k)): tx(v, cat='value') for k, v in vals.items() if tx(v, cat='value')}
+    if key in clutch_labels:
+        for raw, label in enumerate(clutch_labels[key]):
+            if str(raw) in out.get('values', {}):
+                out['values'][str(raw)]['ru'] = label
     return out
 
 
@@ -271,6 +280,57 @@ def record(doc, sid, ident, car_variants, tx):
         rec['alts'] = [{'variants': p, 'params': params(ps, tx)} for p, ps in layouts[1:]]
     return rec
 
+
+
+# Both logical modules use the same diagnostic endpoint. Prefer the identified
+# BSI variant; BSM descriptions can supply an otherwise undocumented index.
+LIVE_GROUPS = {
+    'C0': ('Питание', 'Power supply'), 'C1': ('Кондиционер', 'Air conditioning'),
+    'C2': ('Вождение и педали', 'Driving and pedals'), 'C3': ('Трансмиссия', 'Transmission'),
+    'C5': ('Освещение', 'Lighting'), 'C6': ('Охранная система', 'Alarm'),
+    'C7': ('Ключи и запуск', 'Keys and starting'), 'C8': ('Двери и замки', 'Doors and locks'),
+    'C9': ('Датчики и уровни', 'Sensors and fluid levels'), 'CA': ('Поездка', 'Trip data'),
+    'CB': ('Сигнализаторы', 'Warning indicators'), 'CC': ('Стеклоподъёмники', 'Windows'),
+    'CD': ('Стеклоочистители', 'Wipers'),
+}
+
+
+def mapped_record(source, base, doc, variants, tx):
+    lid = f"{doc['lid']:02X}"
+    if not (base.endswith('/BSI/BSI/') and lid in LIVE_GROUPS and doc.get('mapped')):
+        return None
+    patterns = doc.get('variants') or []
+    if patterns and not any(match(patterns, v) for v in variants):
+        return None
+    fields = {}
+    schema = doc['mapped']['params']
+    for key, data in schema.items():
+        fields[str(data['index'])] = dict(param(key, data, tx), width=data['length'])
+    sibling = base.replace('/BSI/BSI/', '/BSM/BSM/') + 'lids/' + lid + '.yml'
+    if source.has(sibling):
+        for key, data in source.yaml(sibling).get('mapped', {}).get('params', {}).items():
+            index = str(data['index'])
+            if index not in fields:
+                fields[index] = dict(param(key, data, tx), width=data['length'])
+    ru, en = LIVE_GROUPS[lid]
+    return {'req': '21' + lid, 'kind': 'live', 'variants': patterns,
+            'name': {'ru': ru, 'en': en}, 'title': {'ru': ru, 'en': en}, 'indexed': fields}
+
+
+# Короткие названия групп живых данных для кнопок в приложении («C1 · …»). В PSA-RE у групп
+# только «Запись 0xC1 (25 значений)»; названия — по тому, что в группе лежит. Только для
+# моделей, которые стоят на машине и проверены по содержимому групп.
+GROUP_TITLES = {
+    'V341': {   # Valeo V34 (1.4 KFT)
+        'C0': ('Обороты, педали, круиз', 'Speed, pedals, cruise'),
+        'C1': ('Температуры, генератор, кондиционер', 'Temperatures, alternator, A/C'),
+        'C2': ('Зажигание', 'Ignition timing'),
+        'C3': ('Впрыск и лямбда', 'Injection and lambda'),
+        'C4': ('Воздух и дроссель', 'Air and throttle'),
+        'C5': ('Обучения', 'Learned values'),
+        'C6': ('Крутящий момент', 'Torque'),
+    },
+}
 
 def model_json(re, base, name, car_variant_ids, tx):
     e = re.yaml(base + 'ecu.yml')
@@ -319,7 +379,10 @@ def model_json(re, base, name, car_variant_ids, tx):
             lid = doc.get('lid')
             if lid is None:
                 continue
-            r = record(doc, 0x21, [lid], check, tx)
+            r = mapped_record(re, base, doc, check, tx) or record(doc, 0x21, [lid], check, tx)
+            title = GROUP_TITLES.get(name, {}).get(f'{lid:02X}')
+            if r and title:
+                r['title'] = {'ru': title[0], 'en': title[1]}
         else:
             did = doc.get('did')
             if did is None:

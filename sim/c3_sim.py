@@ -187,12 +187,68 @@ ENGINE_VALUES = {
 }
 ABS_VALUES = {'VEHICLE_SPEED': lambda c: c.speed, 'SUPPLY_VOLTAGE': lambda c: c.vbat_mv / 1000,
               'ENGINE_SPEED': lambda c: c.rpm}
+# BSI: as on the car on 21.11.2026 — A/C requested and allowed, the clutch does not engage.
+BSI_VALUES = {
+    'SUPPLY_VOLTAGE': lambda c: c.vbat_mv / 1000, 'BATTERY_VOLTAGE': lambda c: c.vbat_mv / 1000,
+    'IGNITION_POSITIVE': 1,
+    'USER_REQUEST_START_AIR_CONDITIONING': 1, 'AIR_CONDITIONING_COMPRESSOR_REQUEST': 1,
+    'COMPRESSOR_AUTHORISATION_INFORMATION': 1, 'AIR_CON_COMPRESSOR_COMMAND': 1,
+    'STATUS_AIR_CONDITIONING_COMPRESSOR_CLUTCH': 0, 'REFRIGERANT_PRESSURE': 4.4,
+    'AIR_CONDITIONING_EVAPORATOR_TEMPERATURE_SENSOR': 14, 'CALCULATED_EXTERIOR_TEMPERATURE': 14,
+}
+
+# The BSI's own table of live-group parameters: the car's real answers to 35 C0 00 00 nn 11
+# (C3 II, 21.11.2026). Page: 75 C0 <80, or FF on the last page> 00 00 <nn> <n> <n bytes> <2 check bytes>.
+BSI_TABLE_PAGES = [bytes.fromhex(h) for h in (
+    '75C08000000111002C473F4015162528292A3335363738429F0B',
+    '75C080000002114345494A5E03050C0F21232F3031323B3C5BA8',
+    '75C080000003113E41444860FF01051B1F141516171819008A4C',
+    '75C080000004110103040708090C0D0E101A1C1D1EFF0250D602',
+    '75C0800000051131393A4851525354636465666768696A6B0C82',
+    '75C08000000611595A5B5F60615C5D5E02030405090A191A979D',
+    '75C080000007111C1D2324262728292C2D32383B3C3D3E3F754A',
+    '75C08000000811474F5556FF0512343D3F4F0C0D0F101314B0D2',
+    '75C08000000911161C2021242526282A37384142494A4B4C9C3E',
+    '75C08000000A114EFF060406FF070F10292A2F0406080A0CE9E5',
+    '75C08000000B110D0E14161A1C1E2023282EFF084C2603045D14',
+    '75C08000000C1105060708090A0B0C1F202D2E2F31323A3B1483',
+    '75C08000000D113C3D4041424E5054FF093E451E2B2C2E3045F4',
+    '75C08000000E113F414648491B1C2324262D477402141F3160CF',
+    '75C08000000F11424344FF0A08010409FF0B1EFF0D0F2B03DC98',
+    '75C0FF0000100E070B0C0D1113141516171A1B1E2EBB37',
+)]
+
+
+def table_groups(pages):
+    """LID → parameter indexes, from the pages of the table."""
+    data = b''.join(p[7:7 + p[6]] for p in pages)
+    groups = {}
+    for entry in data.split(b'\xff'):
+        if entry:
+            groups[0xC0 + entry[0]] = list(entry[1:])
+    return groups
+
+
+def indexed_layout(rec, indexes):
+    """Positions of a group's values in the order of the table (PSA-RE BSI lids/C1.yml): values
+    under 8 bits are packed from the low bit of a byte, bigger ones start on a byte boundary."""
+    params, offset = [], 0
+    for i in indexes:
+        f = rec['indexed'][str(i)]
+        w = f['width']
+        if w >= 8 or offset % 8 + w > 8:
+            offset = (offset + 7) // 8 * 8
+        byte, low = offset // 8 + 1, offset % 8
+        bits = f'{byte}.7-{byte + w // 8 - 1}.0' if w >= 8 else f'{byte}.{low + w - 1}-{byte}.{low}'
+        params.append(dict(f, bits=bits))
+        offset += w
+    return {'params': params, 'len': (offset + 7) // 8}
 
 
 class KwpEcu:
     """Блок на шине B, KWP2000 по-PSA. Модель, адрес и данные — из базы знаний."""
 
-    def __init__(self, kb, node, model, part, dtcs=(), values=None, extra=None):
+    def __init__(self, kb, node, model, part, dtcs=(), values=None, extra=None, table=()):
         e, m = kb_model(kb, node, model)
         self.name, self.bus = f'{node} {model}', 'B'
         self.tx, self.rx = int(e['tx'], 16), int(e['rx'], 16)
@@ -203,6 +259,8 @@ class KwpEcu:
         self.values = dict(values or {})
         self.values.update(extra or {})
         self.records = {bytes.fromhex(r['req']): r for r in m.get('records', [])}
+        self.table = list(table)               # страницы таблицы живых групп (только у BSI)
+        self.groups = table_groups(self.table)
         self.last = 0.0                        # когда был последний запрос в сеансе
 
     def session_ok(self):
@@ -214,6 +272,11 @@ class KwpEcu:
         is_ident = ident.get('req') and bytes.fromhex(ident['req']) == bytes(req)
         if rec is None and not is_ident:
             return None
+        if rec is not None and 'indexed' in rec:
+            indexes = self.groups.get(req[1]) if len(req) > 1 else None
+            if not indexes:
+                return None                    # the BSI does not list this group in its table
+            return encode(indexed_layout(rec, indexes), self.values, car)
         if rec is not None:
             body = bytearray(encode(rec, self.values, car))
         else:
@@ -241,9 +304,14 @@ class KwpEcu:
             if self.session_ok():
                 self.last = time.monotonic()
             return bytes([0x7E])
-        if sid in (0x21, 0x17, 0x14, 0x22) and not self.session_ok():
+        if sid in (0x21, 0x17, 0x14, 0x22, 0x35) and not self.session_ok():
             return nrc(sid, 0x80)              # без открытого сеанса не отвечает
         self.last = time.monotonic()
+        if sid == 0x35:                        # the BSI's table of live-group parameters
+            page = req[4] if len(req) == 6 and bytes(req[1:4]) == b'\xC0\x00\x00' and req[5] == 0x11 else 0
+            if not self.table or not 1 <= page <= len(self.table):
+                return nrc(sid, 0x31)
+            return self.table[page - 1]
         if sid in (0x21, 0x22):
             n = 2 if sid == 0x21 else 3
             if len(req) < n:
@@ -368,7 +436,7 @@ class Sim:
         for e in (
             KwpEcu(kb, 'BSI', 'BSI', '9659285680',
                    dtcs=[(b'\xC0\x45', STORED), (b'\xF5\x34', ACTIVE)],   # U0045 — общий SAE, U3534 — код PSA
-                   values={'VIN': VIN, 'SUPPLY_VOLTAGE': lambda c: c.vbat_mv / 1000}),
+                   values={'VIN': VIN, **BSI_VALUES}, table=BSI_TABLE_PAGES),
             KwpEcu(kb, 'CMM', 'V46', '789168',
                    dtcs=[(b'\x01\x30', ACTIVE), (b'\x03\x00', STORED)], values=ENGINE_VALUES),
             KwpEcu(kb, 'ABS', 'ESPMK100', '749567', values=ABS_VALUES),

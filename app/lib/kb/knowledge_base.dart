@@ -231,9 +231,15 @@ class Record {
   int get id => int.parse(label, radix: 16);
   String nameFor(String lang) => txt(m['name'], lang);
 
+  /// Короткое название группы для кнопки («Кондиционер»); null — названия нет, только номер.
+  String? titleFor(String lang) => m['title'] == null ? null : txt(m['title'], lang);
+
   List<String> get _variants => [for (final v in (m['variants'] as List? ?? [])) v as String];
 
+  bool get isIndexed => m['indexed'] != null;
+
   bool appliesTo(String? variant) {
+    if (isIndexed && variant == null && _variants.isNotEmpty) return false;
     if (variant == null || _variants.isEmpty || matchVariant(_variants, variant)) return true;
     return _alts.any((a) => a.$1.isEmpty || matchVariant(a.$1, variant));
   }
