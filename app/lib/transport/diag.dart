@@ -13,12 +13,16 @@ class NegativeResponse implements Exception {
 }
 
 class Dtc {
-  Dtc(this.raw, this.status, {bool? active}) : active = active ?? (status & 0x01 != 0);
+  Dtc(this.raw, this.status, {bool? active}) : active = active ?? (status == null ? null : status & 0x01 != 0);
 
   /// 2 байта кода (KWP) или 3 (UDS: код + тип неисправности).
   final List<int> raw;
-  final int status;
-  final bool active;
+
+  /// Байт состояния; null — блок его не прислал (BSI C3 II шлёт только код).
+  final int? status;
+
+  /// Есть ли неисправность сейчас; null — неизвестно.
+  final bool? active;
 
   /// P0130, U0100… (первые два байта, SAE J2012).
   String get code {
@@ -131,16 +135,22 @@ class Kwp extends DiagProtocol {
 
   Future<List<int>> readLid(int lid) => read([0x21, lid]);
 
-  /// 17 FF 00 → 57 <число> {код(2) состояние}...
-  /// Состояние по ISO 14230-3: биты 6–5 = 11 — неисправность есть сейчас,
-  /// 01 — сохранена. Как именно ставят биты блоки PSA, проверить на машине.
+  /// 17 FF 00 → 57 <число> {код(2) состояние}... (PSA-RE, так отвечает двигатель V34).
+  /// Состояние по ISO 14230-3: биты 6–5 = 11 — неисправность есть сейчас, 01 — сохранена.
+  /// BSI C3 II шлёт коды без байта состояния: «57 01 F9 94», «57 03 A4C0 F5FF F994».
+  /// Размер записи — по длине ответа: ровно число × 2 — только коды, иначе по 3 байта.
   @override
   Future<List<Dtc>> readDtcs() async {
     final r = await ask([0x17, 0xFF, 0x00]);
+    if (r.length < 2) return const [];
+    final body = r.sublist(2);
+    if (r[1] > 0 && body.length == r[1] * 2) {
+      return [for (var i = 0; i < body.length; i += 2) Dtc(body.sublist(i, i + 2), null)];
+    }
     final out = <Dtc>[];
-    for (var i = 2; i + 3 <= r.length; i += 3) {
-      final st = r[i + 2];
-      out.add(Dtc(r.sublist(i, i + 2), st, active: (st >> 5) & 0x3 == 0x3));
+    for (var i = 0; i + 3 <= body.length; i += 3) {
+      final st = body[i + 2];
+      out.add(Dtc(body.sublist(i, i + 2), st, active: (st >> 5) & 0x3 == 0x3));
     }
     return out;
   }

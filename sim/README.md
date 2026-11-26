@@ -29,7 +29,7 @@ Options:
 
 - Bus B (OBD 3/8), KWP2000 the PSA way, like a real C3 II (AEE2004): BSI `752/652` (session `10 C0`), engine Valeo V46 `6A8/688` (session `81`), ABS/ESP ESPMK100 `6AD/68D`, airbag Autoliv `744/644`, cluster `75F/65F`.
   ECU models, addresses, part numbers and data layouts come from the app's knowledge base (`app/assets/kb/c3_ii.json`, built from PSA-RE); the values come from the simulated car (rpm, coolant, battery…).
-  Identification (`21 80` / `21 FE`) with a part number of a real C3 II variant, so the app recognises the model; VIN (`21 B0`); data records (`21 xx`); fault codes (`17 FF 00`: BSI two, engine P0130 present and P0300 stored); clearing (`14 FF 00`).
+  Identification (`21 80` / `21 FE`) with a part number of a real C3 II variant, so the app recognises the model; VIN (`21 B0`); data records (`21 xx`); fault codes (`17 FF 00`: the BSI, like the real one, sends codes without a status byte, PSA F5FF and F994; engine P0130 present and P0300 stored); clearing (`14 FF 00`).
 - Every new connection starts from scratch, like a power-up: buses closed, the ECUs' fault codes back, sessions closed.
 - Without an open session the ECUs refuse (`7F xx 80`), and the session drops after 5 s without requests — this checks that the app keeps it alive.
 - Writing and security access are refused with the answer of an ECU without access (`7F xx 33`). The app only reads anyway.

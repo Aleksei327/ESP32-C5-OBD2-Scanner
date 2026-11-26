@@ -453,7 +453,7 @@ class _FaultsTabState extends State<_FaultsTab> {
             final info = app.kb == null ? null : dtcInfoFor(app.kb!, widget.def, model, d, app.lang);
             final open = live && _open == d.key;
             return GlowCard(
-              tint: d.active ? p.bad : p.border,
+              tint: d.active == false ? p.border : p.bad,
               onTap: live ? () => _toggle(d) : null,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
@@ -461,9 +461,10 @@ class _FaultsTabState extends State<_FaultsTab> {
                   if (!widget.def.saeP && d.psa != null)
                     Text('  PSA ${d.psa}', style: mono(context, 13).copyWith(color: p.textDim)),
                   const Spacer(),
-                  Pill(d.active ? t.faultActive : t.faultStored,
-                      fg: d.active ? Colors.white : p.textDim,
-                      bg: d.active ? p.bad : p.textDim.withValues(alpha: 0.12)),
+                  if (d.active case final active?) // блок мог не прислать состояние
+                    Pill(active ? t.faultActive : t.faultStored,
+                        fg: active ? Colors.white : p.textDim,
+                        bg: active ? p.bad : p.textDim.withValues(alpha: 0.12)),
                   if (live) Icon(open ? Icons.expand_less : Icons.expand_more, color: p.textDim),
                 ]),
                 const SizedBox(height: 6),

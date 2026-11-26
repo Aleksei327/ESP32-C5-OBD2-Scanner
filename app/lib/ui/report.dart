@@ -145,8 +145,9 @@ class ScanReport {
                             style: pw.TextStyle(fontSize: 8.5, color: dim)),
                     ]),
                   ),
-                  pw.Text(d.active ? t.faultActive : t.faultStored,
-                      style: pw.TextStyle(fontSize: 9, color: d.active ? red : dim)),
+                  if (d.active case final active?)
+                    pw.Text(active ? t.faultActive : t.faultStored,
+                        style: pw.TextStyle(fontSize: 9, color: active ? red : dim)),
                 ]),
               ],
             ]),

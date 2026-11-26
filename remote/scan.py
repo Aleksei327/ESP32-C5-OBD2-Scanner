@@ -374,8 +374,15 @@ class Ecu:
             if err:
                 return None, err
             out = []
-            for i in range(2, len(resp) - 2, 3):
-                raw, st = resp[i:i + 2], resp[i + 2]
+            body = resp[2:] if len(resp) >= 2 else b''
+            if len(resp) >= 2 and resp[1] and len(body) == resp[1] * 2:
+                # BSI C3 II: codes only, no status byte (57 01 F9 94, 57 03 A4C0 F5FF F994)
+                for i in range(0, len(body), 2):
+                    raw = body[i:i + 2]
+                    out.append({'code': dtc_code(raw), 'raw': raw.hex().upper(), 'status': None, 'active': None})
+                return out, None
+            for i in range(0, len(body) - 2, 3):
+                raw, st = body[i:i + 2], body[i + 2]
                 out.append({'code': dtc_code(raw), 'raw': raw.hex().upper(), 'status': f'{st:02X}',
                             'active': (st >> 5) & 3 == 3})
             return out, None
@@ -681,8 +688,11 @@ def report(res):
             any_dtc = True
             L.append(f"**{e['node']} — {e['name']}**")
             for x in e['dtc']:
-                state = 'активна' if x['active'] else 'сохранена'
-                L.append(f"- `{x.get('key') or x['code']}` ({state}, статус {x['status']}): {x.get('text') or 'текста в базе нет'}")
+                if x['active'] is None:
+                    state = f"PSA {x['raw']}, без байта состояния"
+                else:
+                    state = f"{'активна' if x['active'] else 'сохранена'}, статус {x['status']}"
+                L.append(f"- `{x.get('key') or x['code']}` ({state}): {x.get('text') or 'текста в базе нет'}")
             L.append('')
     if not any_dtc:
         L += ['Ошибок нет ни в одном ответившем блоке.', '']

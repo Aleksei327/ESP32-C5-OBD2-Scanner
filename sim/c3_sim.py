@@ -248,7 +248,7 @@ def indexed_layout(rec, indexes):
 class KwpEcu:
     """Блок на шине B, KWP2000 по-PSA. Модель, адрес и данные — из базы знаний."""
 
-    def __init__(self, kb, node, model, part, dtcs=(), values=None, extra=None, table=()):
+    def __init__(self, kb, node, model, part, dtcs=(), values=None, extra=None, table=(), dtc_status=True):
         e, m = kb_model(kb, node, model)
         self.name, self.bus = f'{node} {model}', 'B'
         self.tx, self.rx = int(e['tx'], 16), int(e['rx'], 16)
@@ -256,6 +256,7 @@ class KwpEcu:
         self.open_req = bytes.fromhex(m.get('open') or '81')
         self.part = part
         self.dtcs = list(dtcs)                 # [(2 байта кода, байт состояния)]
+        self.dtc_status = dtc_status           # False — в ответе только коды, как у BSI C3 II
         self.values = dict(values or {})
         self.values.update(extra or {})
         self.records = {bytes.fromhex(r['req']): r for r in m.get('records', [])}
@@ -323,7 +324,7 @@ class KwpEcu:
         if sid == 0x17:
             out = bytearray([0x57, len(self.dtcs)])
             for code, st in self.dtcs:
-                out += code + bytes([st])
+                out += code + (bytes([st]) if self.dtc_status else b'')
             return bytes(out)
         if sid == 0x14:                        # сброс; те, что есть сейчас (биты 6–5 = 11), вернутся
             self.dtcs = [d for d in self.dtcs if (d[1] >> 5) & 3 == 3]
@@ -435,7 +436,9 @@ class Sim:
         # Модели и номера деталей — из вариантов C3 II в базе знаний (A51_…)
         for e in (
             KwpEcu(kb, 'BSI', 'BSI', '9659285680',
-                   dtcs=[(b'\xC0\x45', STORED), (b'\xF5\x34', ACTIVE)],   # U0045 — общий SAE, U3534 — код PSA
+                   # как у машины: F5FF — неожиданный сброс BSI, F994 — компрессор кондиционера;
+                   # BSI шлёт только коды, без байта состояния
+                   dtcs=[(b'\xF5\xFF', STORED), (b'\xF9\x94', ACTIVE)], dtc_status=False,
                    values={'VIN': VIN, **BSI_VALUES}, table=BSI_TABLE_PAGES),
             KwpEcu(kb, 'CMM', 'V46', '789168',
                    dtcs=[(b'\x01\x30', ACTIVE), (b'\x03\x00', STORED)], values=ENGINE_VALUES),

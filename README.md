@@ -6,6 +6,8 @@ A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, togethe
 
 > **Status (November 2026): working, tested on the car.** Board v1 is built into its OBD2 enclosure, the firmware and app 0.1.6 are finished for the C3 II, and the whole chain has been used on the car: in November full scans found 10 ECUs, fault codes were read with their texts and cleared on the BSI and the instrument cluster, live data and an A/C test were recorded. Release: [v1.0](https://github.com/Aleksei327/ESP32-C5-OBD2-Scanner/releases/tag/v1.0).
 
+**[Release v1.1 · Android 0.1.8](https://github.com/Aleksei327/ESP32-C5-OBD2-Scanner/releases/tag/v1.1).** The app and remote scanner read two-byte BSI codes and KWP records with a status byte. When the ECU omits the status, fault activity remains unknown in the app and PDF. Clearing can return [0x22 — conditions not met](DOCS/images/app-clear-nrc22.jpg) or [0x12 — unsupported command](DOCS/images/app-clear-nrc12.jpg).
+
 **App update 0.1.7.** Adds BSI/BSM live groups and record validation. See the [app guide](app/README.md) for the A/C and body-system checks.
 
 ![The scanner in its OBD2 enclosure](DOCS/images/photo-assembled.jpg)
@@ -14,7 +16,7 @@ A DIY dual-CAN OBD2 diagnostic adapter built on the Seeed XIAO ESP32-C5, togethe
 
 - **Hardware:** single-sided 40 × 60 mm home-etched board in an OBD2 enclosure. Measured: on the car's OBD socket 13.4 V engine off and 14.4 V running; on the bench 4.95 V after the LM2596 and 4.83 V at the XIAO. The battery voltage reads within 0.05 V. Both CAN channels pass the self-test; the transmitters stay off in hardware until the firmware enables them.
 - **Firmware** (ESP-IDF 6.1): Wi-Fi access point with its own password, WebSocket protocol, both CAN channels (OBD 6/14 and 3/8), ISO-TP with the PSA "response pending" handled, bus monitor, battery voltage, USB console with a self-test.
-- **App 0.1.7** (Android): auto scan of every ECU in the knowledge base; ECU model recognised by part number; fault codes with texts from PSA-RE, the generic SAE list and, if built locally, the PSA code list in Russian and English; fault clearing, with refusals explained in words; a log of every request to the ECUs on the phone; identification, live data, settings (read only); gauges, numbers and charts; bus monitor; PDF report. Scans are saved on the phone with a history (10 per car), a single module can be rescanned, and the garage and saved scans open without the adapter. The phone keeps its mobile internet while on the adapter's Wi-Fi.
+- **App 0.1.8** (Android): auto scan of every ECU in the knowledge base; ECU model recognised by part number; fault codes with texts from PSA-RE, the generic SAE list and, if built locally, the PSA code list in Russian and English; fault clearing, with refusals explained in words; a log of every request to the ECUs on the phone; identification, live data, settings (read only); gauges, numbers and charts; bus monitor; PDF report. Scans are saved on the phone with a history (10 per car), a single module can be rescanned, and the garage and saved scans open without the adapter. The phone keeps its mobile internet while on the adapter's Wi-Fi.
 - **Remote work:** a computer at home reaches the adapter at the car through the phone and a Cloudflare tunnel; `remote/scan.py` writes a full read-only scan to a report.
 - **Simulator:** a C3 II in Python, to develop and test the app without the car.
 

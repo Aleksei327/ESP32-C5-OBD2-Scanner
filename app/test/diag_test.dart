@@ -139,6 +139,21 @@ void main() {
     expect(Dtc([0x01, 0x30], 0x60, active: true).key, 'P0130');
   });
 
+  test('KWP 17 FF 00: BSI шлёт коды без состояния, двигатель — с состоянием (ответы машины)', () async {
+    Future<List<Dtc>> read(List<int> answer) =>
+        Kwp(FakeClient((tx, req) => answer), 'B', 0x752, 0x652).readDtcs();
+    final now = await read([0x57, 0x01, 0xF9, 0x94]); // BSI 22.11.2026
+    expect(now.map((d) => d.psa), ['F994']);
+    expect(now.single.active, isNull);
+    expect(now.single.status, isNull);
+    final nov2 = await read([0x57, 0x03, 0xA4, 0xC0, 0xF5, 0xFF, 0xF9, 0x94]); // BSI 02.11.2026
+    expect(nov2.map((d) => d.psa), ['A4C0', 'F5FF', 'F994']);
+    final eng = await read([0x57, 0x03, 0x11, 0x09, 0x01, 0x00, 0x08, 0x0A, 0xE0, 0x00, 0x1E]); // V34
+    expect(eng.map((d) => d.code), ['P1109', 'P0008', 'U2000']);
+    expect(eng.every((d) => d.active != null), true);
+    expect(await read([0x57, 0x00]), isEmpty);
+  });
+
   test('коды PSA: тип + номер; блоки с P-кодами ищут «P…»', () {
     final kb = loadKb()
       ..psa = {

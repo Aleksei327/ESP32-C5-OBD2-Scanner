@@ -55,7 +55,7 @@ class SavedEcu {
         variant: j['variant'] as String?,
         dtcs: [
           for (final d in (j['dtcs'] as List? ?? const []))
-            Dtc([for (final b in d['raw'] as List) b as int], d['status'] as int, active: d['active'] as bool?)
+            Dtc([for (final b in d['raw'] as List) b as int], d['status'] as int?, active: d['active'] as bool?)
         ],
       );
 }

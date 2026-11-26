@@ -31,7 +31,9 @@ void main() {
     expect(answered.values.every((r) => r.proto is Kwp), true);
 
     final bsi = answered['BSI']!;
-    expect(bsi.dtcs.length, 2);
+    // BSI шлёт коды без байта состояния — как настоящий
+    expect(bsi.dtcs.map((d) => d.psa), ['F5FF', 'F994']);
+    expect(bsi.dtcs.every((d) => d.active == null), true);
     final climate = diag.records(bsi.def, 'live').singleWhere((r) => r.label == 'C1');
     final climateValues = await diag.readRecord(bsi.def, climate);
     // в симуляторе — таблица настоящей машины и её поломка: компрессор включён, муфта нет
